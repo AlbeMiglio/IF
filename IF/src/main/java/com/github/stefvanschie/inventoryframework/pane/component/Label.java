@@ -1,11 +1,12 @@
 package com.github.stefvanschie.inventoryframework.pane.component;
 
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
 import com.github.stefvanschie.inventoryframework.gui.type.util.Gui;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
 import com.github.stefvanschie.inventoryframework.font.util.Font;
 import com.github.stefvanschie.inventoryframework.pane.*;
+import com.github.stefvanschie.inventoryframework.pane.util.GuiItemContainer;
 import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
@@ -15,6 +16,8 @@ import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.w3c.dom.Element;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.function.BiFunction;
 
 /**
@@ -22,7 +25,7 @@ import java.util.function.BiFunction;
  *
  * @since 0.5.0
  */
-public class Label extends OutlinePane {
+public class Label extends Pane {
 
     /**
      * The character set used for displaying the characters in this label
@@ -37,6 +40,12 @@ public class Label extends OutlinePane {
     private String text;
 
     /**
+     * The pane used for displaying the label.
+     */
+    @NotNull
+    private OutlinePane pane;
+
+    /**
      * The plugin to be sed for creating items
      */
     @NotNull
@@ -45,18 +54,17 @@ public class Label extends OutlinePane {
     /**
      * Creates a new label
      *
-     * @param slot the slot
      * @param length the length
      * @param height the height
      * @param priority the priority
      * @param font the character set
      * @param plugin the plugin that will be the owner for this label's items
-     * @see #Label(int, int, int, int, Priority, Font)
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public Label(@NotNull Slot slot, int length, int height, @NotNull Priority priority, @NotNull Font font,
-                 @NotNull Plugin plugin) {
-        super(slot, length, height);
+    public Label(int length, int height, @NotNull Priority priority, @NotNull Font font, @NotNull Plugin plugin) {
+        super(length, height);
+
+        this.pane = new OutlinePane(length, height, priority);
 
         this.font = font;
         this.text = "";
@@ -69,120 +77,27 @@ public class Label extends OutlinePane {
     /**
      * Creates a new label
      *
-     * @param x the x coordinate
-     * @param y the y coordinate
-     * @param length the length
-     * @param height the height
-     * @param priority the priority
-     * @param font the character set
-     * @param plugin the plugin that will be the owner for this label's items
-     * @see #Label(int, int, int, int, Priority, Font)
-     * @since 0.10.8
-     */
-    public Label(int x, int y, int length, int height, @NotNull Priority priority, @NotNull Font font,
-                 @NotNull Plugin plugin) {
-        this(Slot.fromXY(x, y), length, height, priority, font, plugin);
-    }
-
-    /**
-     * Creates a new label
-     *
-     * @param slot the slot
      * @param length the length
      * @param height the height
      * @param font the character set
      * @param plugin the plugin that will be the owner for this label's items
-     * @see #Label(int, int, int, int, Font)
-     * @since 0.10.8
-     */
-    public Label(@NotNull Slot slot, int length, int height, @NotNull Font font, @NotNull Plugin plugin) {
-        this(slot, length, height, Priority.NORMAL, font, plugin);
-    }
-
-    /**
-     * Creates a new label
-     *
-     * @param x the x coordinate
-     * @param y the y coordinate
-     * @param length the length
-     * @param height the height
-     * @param font the character set
-     * @param plugin the plugin that will be the owner for this label's items
-     * @see #Label(int, int, int, int, Font)
-     * @since 0.10.8
-     */
-    public Label(int x, int y, int length, int height, @NotNull Font font, @NotNull Plugin plugin) {
-        this(x, y, length, height, Priority.NORMAL, font, plugin);
-    }
-
-    /**
-     * Creates a new label
-     *
-     * @param length the length
-     * @param height the height
-     * @param font the character set
-     * @param plugin the plugin that will be the owner for this label's items
-     * @see #Label(int, int, Font)
-     * @since 0.10.8
+     * @since 0.12.0
      */
     public Label(int length, int height, @NotNull Font font, @NotNull Plugin plugin) {
-        this(0, 0, length, height, font, plugin);
+        this(length, height, Priority.NORMAL, font, plugin);
     }
 
     /**
      * Creates a new label
      *
-     * @param slot the slot
      * @param length the length
      * @param height the height
      * @param priority the priority
      * @param font the character set
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public Label(@NotNull Slot slot, int length, int height, @NotNull Priority priority, @NotNull Font font) {
-        this(slot, length, height, priority, font, JavaPlugin.getProvidingPlugin(Label.class));
-    }
-
-    /**
-     * Creates a new label
-     *
-     * @param x the x coordinate
-     * @param y the y coordinate
-     * @param length the length
-     * @param height the height
-     * @param priority the priority
-     * @param font the character set
-     * @since 0.5.0
-     */
-    public Label(int x, int y, int length, int height, @NotNull Priority priority, @NotNull Font font) {
-        this(x, y, length, height, priority, font, JavaPlugin.getProvidingPlugin(Label.class));
-    }
-
-    /**
-     * Creates a new label
-     *
-     * @param slot the slot
-     * @param length the length
-     * @param height the height
-     * @param font the character set
-     * @since 0.10.8
-     */
-    public Label(@NotNull Slot slot, int length, int height, @NotNull Font font) {
-        this(slot, length, height, Priority.NORMAL, font);
-    }
-
-    /**
-     * Creates a new label
-     *
-     * @param x the x coordinate
-     * @param y the y coordinate
-     * @param length the length
-     * @param height the height
-     * @param font the character set
-     * @since 0.5.0
-     */
-    public Label(int x, int y, int length, int height, @NotNull Font font) {
-        this(x, y, length, height, Priority.NORMAL, font);
+    public Label(int length, int height, @NotNull Priority priority, @NotNull Font font) {
+        this(length, height, priority, font, JavaPlugin.getProvidingPlugin(Label.class));
     }
 
     /**
@@ -191,10 +106,10 @@ public class Label extends OutlinePane {
      * @param length the length
      * @param height the height
      * @param font the character set
-     * @since 0.5.0
+     * @since 0.12.0
      */
     public Label(int length, int height, @NotNull Font font) {
-        this(0, 0, length, height, font);
+        this(length, height, Priority.NORMAL, font);
     }
 
     /**
@@ -229,7 +144,7 @@ public class Label extends OutlinePane {
                 item = font.getDefaultItem();
             }
 
-            addItem(processor.apply(character, item.clone()));
+            this.pane.addItem(processor.apply(character, item.clone()));
         }
     }
 
@@ -248,22 +163,12 @@ public class Label extends OutlinePane {
     @Contract(pure = true)
     @Override
     public Label copy() {
-        Label label = new Label(getSlot(), length, height, getPriority(), font, this.plugin);
-
-        for (GuiItem item : getItems()) {
-            label.addItem(item.copy());
-        }
+        Label label = new Label(getLength(), getHeight(), getPriority(), getFont(), this.plugin);
 
         label.setVisible(isVisible());
         label.onClick = onClick;
 
-        label.setOrientation(getOrientation());
-        label.setRotation(getRotation());
-        label.setGap(getGap());
-        label.setRepeat(doesRepeat());
-        label.flipHorizontally(isFlippedHorizontally());
-        label.flipVertically(isFlippedVertically());
-        label.applyMask(getMask());
+        label.pane = this.pane.copy();
         label.uuid = uuid;
 
         label.text = text;
@@ -272,12 +177,34 @@ public class Label extends OutlinePane {
     }
 
     @Override
-    public boolean click(@NotNull Gui gui, @NotNull InventoryComponent inventoryComponent,
-                         @NotNull InventoryClickEvent event, int slot, int paneOffsetX, int paneOffsetY, int maxLength,
-                         int maxHeight) {
+    public boolean click(@NotNull Gui gui, @NotNull GuiComponent guiComponent, @NotNull InventoryClickEvent event,
+                         @NotNull Slot slot) {
         event.setCancelled(true);
 
-        return super.click(gui, inventoryComponent, event, slot, paneOffsetX, paneOffsetY, maxLength, maxHeight);
+        return this.pane.click(gui, guiComponent, event, slot);
+    }
+
+    @NotNull
+    @Override
+    public GuiItemContainer display() {
+        return this.pane.display();
+    }
+
+    @NotNull
+    @Override
+    public Collection<GuiItem> getItems() {
+        return this.pane.getItems();
+    }
+
+    @Override
+    public void clear() {
+        this.pane.clear();
+    }
+
+    @NotNull
+    @Override
+    public Collection<Pane> getPanes() {
+        return Collections.emptySet();
     }
 
     /**
@@ -316,14 +243,27 @@ public class Label extends OutlinePane {
     @NotNull
     @Contract(pure = true)
     public static Label load(@NotNull Object instance, @NotNull Element element, @NotNull Plugin plugin) {
+        if (!element.hasAttribute("length")) {
+            throw new XMLLoadException("Label XML tag does not have the mandatory length attribute");
+        }
+
+        if (!element.hasAttribute("height")) {
+            throw new XMLLoadException("Label XML tag does not have the mandatory height attribute");
+        }
+
         int length;
         int height;
 
         try {
             length = Integer.parseInt(element.getAttribute("length"));
+        } catch (NumberFormatException exception) {
+            throw new XMLLoadException("Length attribute is not an integer", exception);
+        }
+
+        try {
             height = Integer.parseInt(element.getAttribute("height"));
         } catch (NumberFormatException exception) {
-            throw new XMLLoadException(exception);
+            throw new XMLLoadException("Height attribute is not an integer", exception);
         }
 
         Font font = null;
@@ -339,9 +279,6 @@ public class Label extends OutlinePane {
         Label label = new Label(length, height, font, plugin);
 
         Pane.load(label, instance, element);
-        Orientable.load(label, element);
-        Flippable.load(label, element);
-        Rotatable.load(label, element);
 
         if (element.hasAttribute("populate")) {
             return label;
@@ -352,21 +289,5 @@ public class Label extends OutlinePane {
         }
 
         return label;
-    }
-
-    /**
-     * Loads a label from a given element
-     *
-     * @param instance the instance class
-     * @param element the element
-     * @return the percentage bar
-     * @deprecated this method is no longer used internally and has been superseded by
-     *             {@link #load(Object, Element, Plugin)}
-     */
-    @NotNull
-    @Contract(pure = true)
-    @Deprecated
-    public static Label load(@NotNull Object instance, @NotNull Element element) {
-        return load(instance, element, JavaPlugin.getProvidingPlugin(Label.class));
     }
 }

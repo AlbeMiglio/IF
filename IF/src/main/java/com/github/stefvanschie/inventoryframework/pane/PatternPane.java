@@ -2,15 +2,15 @@ package com.github.stefvanschie.inventoryframework.pane;
 
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
 import com.github.stefvanschie.inventoryframework.gui.type.util.Gui;
+import com.github.stefvanschie.inventoryframework.pane.util.GuiItemContainer;
 import com.github.stefvanschie.inventoryframework.pane.util.Pattern;
 import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import com.github.stefvanschie.inventoryframework.util.GeometryUtil;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.w3c.dom.Element;
@@ -57,16 +57,15 @@ public class PatternPane extends Pane implements Flippable, Rotatable {
     /**
      * Constructs a new pattern pane.
      *
-     * @param slot the slot of the pane
      * @param length the length of the pane
      * @param height the height of the pane
      * @param priority the priority of the pane
      * @param pattern the pattern of the pane
      * @throws IllegalArgumentException when the pane and pattern dimensions don't match
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public PatternPane(@NotNull Slot slot, int length, int height, @NotNull Priority priority, @NotNull Pattern pattern) {
-        super(slot, length, height, priority);
+    public PatternPane(int length, int height, @NotNull Priority priority, @NotNull Pattern pattern) {
+        super(length, height, priority);
 
         if (pattern.getLength() != length || pattern.getHeight() != height) {
             throw new IllegalArgumentException(
@@ -75,22 +74,6 @@ public class PatternPane extends Pane implements Flippable, Rotatable {
         }
 
         this.pattern = pattern;
-    }
-
-    /**
-     * Constructs a new pattern pane.
-     *
-     * @param x the upper left x coordinate of the pane
-     * @param y the upper left y coordinate of the pane
-     * @param length the length of the pane
-     * @param height the height of the pane
-     * @param priority the priority of the pane
-     * @param pattern the pattern of the pane
-     * @throws IllegalArgumentException when the pane and pattern dimensions don't match
-     * @since 0.9.8
-     */
-    public PatternPane(int x, int y, int length, int height, @NotNull Priority priority, @NotNull Pattern pattern) {
-        this(Slot.fromXY(x, y), length, height, priority, pattern);
     }
 
     /**
@@ -103,46 +86,16 @@ public class PatternPane extends Pane implements Flippable, Rotatable {
      * @since 0.9.8
      */
     public PatternPane(int length, int height, @NotNull Pattern pattern) {
-        this(0, 0, length, height, pattern);
+        this(length, height, Priority.NORMAL, pattern);
     }
 
-    /**
-     * Constructs a new pattern pane.
-     *
-     * @param slot the slot of the pane
-     * @param length the length of the pane
-     * @param height the height of the pane
-     * @param pattern the pattern of the pane
-     * @throws IllegalArgumentException when the pane and pattern dimensions don't match
-     * @since 0.10.8
-     */
-    public PatternPane(@NotNull Slot slot, int length, int height, @NotNull Pattern pattern) {
-        this(slot, length, height, Priority.NORMAL, pattern);
-    }
-
-    /**
-     * Constructs a new pattern pane.
-     *
-     * @param x the upper left x coordinate of the pane
-     * @param y the upper left y coordinate of the pane
-     * @param length the length of the pane
-     * @param height the height of the pane
-     * @param pattern the pattern of the pane
-     * @throws IllegalArgumentException when the pane and pattern dimensions don't match
-     * @since 0.9.8
-     */
-    public PatternPane(int x, int y, int length, int height, @NotNull Pattern pattern) {
-        this(x, y, length, height, Priority.NORMAL, pattern);
-    }
-
+    @NotNull
     @Override
-    public void display(@NotNull InventoryComponent inventoryComponent, int paneOffsetX, int paneOffsetY, int maxLength,
-                        int maxHeight) {
-        int length = Math.min(this.length, maxLength);
-        int height = Math.min(this.height, maxHeight);
+    public GuiItemContainer display() {
+        GuiItemContainer container = new GuiItemContainer(getLength(), getHeight());
 
-        for (int x = 0; x < length; x++) {
-            for (int y = 0; y < height; y++) {
+        for (int x = 0; x < getLength(); x++) {
+            for (int y = 0; y < getHeight(); y++) {
                 GuiItem item = this.bindings.get(pattern.getCharacter(x, y));
 
                 if (item == null || !item.isVisible()) {
@@ -152,50 +105,31 @@ public class PatternPane extends Pane implements Flippable, Rotatable {
                 int newX = x, newY = y;
 
                 if (isFlippedHorizontally()) {
-                    newX = length - x - 1;
+                    newX = getLength() - x - 1;
                 }
 
                 if (isFlippedVertically()) {
-                    newY = height - y - 1;
+                    newY = getHeight() - y - 1;
                 }
 
-                Map.Entry<Integer, Integer> coordinates = GeometryUtil.processClockwiseRotation(newX, newY, length,
-                    height, rotation);
+                Map.Entry<Integer, Integer> coordinates = GeometryUtil.processClockwiseRotation(newX, newY, getLength(),
+                    getHeight(), rotation);
 
-                newX = coordinates.getKey();
-                newY = coordinates.getValue();
-
-                Slot slot = getSlot();
-
-                int finalRow = slot.getY(maxLength) + newY + paneOffsetY;
-                int finalColumn = slot.getX(maxLength) + newX + paneOffsetX;
-
-                inventoryComponent.setItem(item, finalColumn, finalRow);
+                container.setItem(item, coordinates.getKey(), coordinates.getValue());
             }
         }
+
+        return container;
     }
 
     @Override
-    public boolean click(@NotNull Gui gui, @NotNull InventoryComponent inventoryComponent,
-                         @NotNull InventoryClickEvent event, int slot, int paneOffsetX, int paneOffsetY, int maxLength,
-                         int maxHeight) {
-        int length = Math.min(this.length, maxLength);
-        int height = Math.min(this.height, maxHeight);
-
-        Slot paneSlot = getSlot();
-
-        int xPosition = paneSlot.getX(maxLength);
-        int yPosition = paneSlot.getY(maxLength);
-
-        int totalLength = inventoryComponent.getLength();
-
-        int adjustedSlot = slot - (xPosition + paneOffsetX) - totalLength * (yPosition + paneOffsetY);
-
-        int x = adjustedSlot % totalLength;
-        int y = adjustedSlot / totalLength;
+    public boolean click(@NotNull Gui gui, @NotNull GuiComponent guiComponent, @NotNull InventoryClickEvent event,
+                         @NotNull Slot slot) {
+        int x = slot.getX(getLength());
+        int y = slot.getY(getLength());
 
         //this isn't our item
-        if (x < 0 || x >= length || y < 0 || y >= height) {
+        if (x < 0 || x >= getLength() || y < 0 || y >= getHeight()) {
             return false;
         }
 
@@ -222,7 +156,7 @@ public class PatternPane extends Pane implements Flippable, Rotatable {
     @Contract(pure = true)
     @Override
     public PatternPane copy() {
-        PatternPane patternPane = new PatternPane(getSlot(), getLength(), getHeight(), getPriority(), getPattern());
+        PatternPane patternPane = new PatternPane(getLength(), getHeight(), getPriority(), getPattern());
 
         patternPane.setVisible(isVisible());
         patternPane.onClick = onClick;
@@ -387,97 +321,97 @@ public class PatternPane extends Pane implements Flippable, Rotatable {
      */
     @NotNull
     public static PatternPane load(@NotNull Object instance, @NotNull Element element, @NotNull Plugin plugin) {
-        try {
-            NodeList childNodes = element.getChildNodes();
+        NodeList childNodes = element.getChildNodes();
 
-            Pattern pattern = null;
-            Map<Integer, GuiItem> bindings = new HashMap<>();
+        Pattern pattern = null;
+        Map<Integer, GuiItem> bindings = new HashMap<>();
 
-            for (int i = 0; i < childNodes.getLength(); i++) {
-                Node item = childNodes.item(i);
+        for (int i = 0; i < childNodes.getLength(); i++) {
+            Node item = childNodes.item(i);
 
-                if (item.getNodeType() != Node.ELEMENT_NODE) {
-                    continue;
-                }
-
-                Element child = (Element) item;
-                String name = item.getNodeName();
-
-                if (name.equals("pattern")) {
-                    pattern = Pattern.load(child);
-                } else if (name.equals("binding")) {
-                    String character = child.getAttribute("char");
-
-                    if (character == null) {
-                        throw new XMLLoadException("Missing char attribute on binding");
-                    }
-
-                    if (character.codePointCount(0, character.length()) != 1) {
-                        throw new XMLLoadException("Char attribute doesn't have one character");
-                    }
-
-                    NodeList children = child.getChildNodes();
-                    GuiItem guiItem = null;
-
-                    for (int index = 0; index < children.getLength(); index++) {
-                        Node guiItemNode = children.item(index);
-
-                        if (guiItemNode.getNodeType() != Node.ELEMENT_NODE) {
-                            continue;
-                        }
-
-                        if (guiItem != null) {
-                            throw new XMLLoadException("Binding has multiple inner tags, one expected");
-                        }
-
-                        guiItem = Pane.loadItem(instance, (Element) guiItemNode, plugin);
-                    }
-
-                    //guaranteed to only be a single code point
-                    bindings.put(character.codePoints().toArray()[0], guiItem);
-                } else {
-                    throw new XMLLoadException("Unknown tag " + name + " in pattern pane");
-                }
+            if (item.getNodeType() != Node.ELEMENT_NODE) {
+                continue;
             }
 
-            if (pattern == null) {
-                throw new XMLLoadException("Pattern pane doesn't have a pattern");
-            }
+            Element child = (Element) item;
+            String name = item.getNodeName();
 
-            PatternPane patternPane = new PatternPane(
-                Integer.parseInt(element.getAttribute("length")),
-                Integer.parseInt(element.getAttribute("height")),
-                pattern
-            );
-
-            Pane.load(patternPane, instance, element);
-            Flippable.load(patternPane, element);
-            Rotatable.load(patternPane, element);
-
-            if (!element.hasAttribute("populate")) {
-                for (Map.Entry<Integer, GuiItem> entry : bindings.entrySet()) {
-                    patternPane.bindItem(entry.getKey(), entry.getValue());
+            if (name.equals("pattern")) {
+                pattern = Pattern.load(child);
+            } else if (name.equals("binding")) {
+                if (!child.hasAttribute("char")) {
+                    throw new XMLLoadException("Tag binding is missing char attribute");
                 }
-            }
 
-            return patternPane;
-        } catch (NumberFormatException exception) {
-            throw new XMLLoadException(exception);
+                String character = child.getAttribute("char");
+
+                if (character.codePointCount(0, character.length()) != 1) {
+                    throw new XMLLoadException("Char attribute doesn't have one character");
+                }
+
+                NodeList children = child.getChildNodes();
+                GuiItem guiItem = null;
+
+                for (int index = 0; index < children.getLength(); index++) {
+                    Node guiItemNode = children.item(index);
+
+                    if (guiItemNode.getNodeType() != Node.ELEMENT_NODE) {
+                        continue;
+                    }
+
+                    if (guiItem != null) {
+                        throw new XMLLoadException("Binding has multiple inner tags, one expected");
+                    }
+
+                    guiItem = GuiItem.loadItem(instance, (Element) guiItemNode, plugin);
+                }
+
+                //guaranteed to only be a single code point
+                bindings.put(character.codePoints().toArray()[0], guiItem);
+            } else {
+                throw new XMLLoadException("Unknown tag " + name + " in pattern pane");
+            }
         }
-    }
 
-    /**
-     * Loads a pattern pane from a given element
-     *
-     * @param instance the instance class
-     * @param element the element
-     * @return the pattern pane
-     * @deprecated this method is no longer used internally and has been superseded by
-     *             {@link #load(Object, Element, Plugin)}
-     */
-    @NotNull
-    @Deprecated
-    public static PatternPane load(@NotNull Object instance, @NotNull Element element) {
-        return load(instance, element, JavaPlugin.getProvidingPlugin(PatternPane.class));
+        if (pattern == null) {
+            throw new XMLLoadException("Pattern pane doesn't have a pattern");
+        }
+
+        if (!element.hasAttribute("length")) {
+            throw new XMLLoadException("Pattern pane XML tag does not have the mandatory length attribute");
+        }
+
+        if (!element.hasAttribute("height")) {
+            throw new XMLLoadException("Pattern pane XML tag does not have the mandatory height attribute");
+        }
+
+        int length;
+        int height;
+
+        try {
+            length = Integer.parseInt(element.getAttribute("length"));
+        } catch (NumberFormatException exception) {
+            throw new XMLLoadException("Length attribute is not an integer", exception);
+        }
+
+        try {
+            height = Integer.parseInt(element.getAttribute("height"));
+        } catch (NumberFormatException exception) {
+            throw new XMLLoadException("Height attribute is not an integer", exception);
+        }
+
+        PatternPane patternPane = new PatternPane(length, height, pattern);
+
+        Pane.load(patternPane, instance, element);
+        Flippable.load(patternPane, element);
+        Rotatable.load(patternPane, element);
+
+        if (!element.hasAttribute("populate")) {
+            for (Map.Entry<Integer, GuiItem> entry : bindings.entrySet()) {
+                patternPane.bindItem(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return patternPane;
     }
 }

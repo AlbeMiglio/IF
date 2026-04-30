@@ -4,15 +4,16 @@ import com.github.stefvanschie.inventoryframework.HumanEntityCache;
 import com.github.stefvanschie.inventoryframework.abstraction.SmithingTableInventory;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.util.InventoryBased;
 import com.github.stefvanschie.inventoryframework.gui.type.util.NamedGui;
+import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.util.version.Version;
 import com.github.stefvanschie.inventoryframework.util.version.VersionMatcher;
+import org.bukkit.Material;
 import org.bukkit.entity.HumanEntity;
-import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
@@ -44,36 +45,30 @@ import java.util.List;
 public class ModernSmithingTableGui extends NamedGui implements InventoryBased {
 
     /**
-     * Represents the inventory component for the input
+     * Represents the gui component for the input
      */
     @NotNull
-    private InventoryComponent inputComponent = new InventoryComponent(3, 1);
+    private GuiComponent inputComponent = new GuiComponent(3, 1);
 
     /**
-     * Represents the inventory component for the result
+     * Represents the gui component for the result
      */
     @NotNull
-    private InventoryComponent resultComponent = new InventoryComponent(1, 1);
+    private GuiComponent resultComponent = new GuiComponent(1, 1);
 
     /**
-     * Represents the inventory component for the player inventory
+     * Represents the gui component for the player inventory
      */
     @NotNull
-    private InventoryComponent playerInventoryComponent = new InventoryComponent(9, 4);
+    private GuiComponent playerGuiComponent = new GuiComponent(9, 4);
 
     /**
      * An internal smithing inventory
      */
     @NotNull
     private final SmithingTableInventory smithingTableInventory = VersionMatcher.newModernSmithingTableInventory(
-            Version.getVersion(), this
+            Version.getVersion()
     );
-
-    /**
-     * The viewers of this gui
-     */
-    @NotNull
-    private final Collection<HumanEntity> viewers = new HashSet<>();
 
     /**
      * Constructs a new GUI.
@@ -120,13 +115,19 @@ public class ModernSmithingTableGui extends NamedGui implements InventoryBased {
     }
 
     @Override
-    public void show(@NotNull HumanEntity humanEntity) {
-        if (!(humanEntity instanceof Player)) {
-            throw new IllegalArgumentException("Smithing tables can only be opened by players");
-        }
+    public void update() {
+        super.updating = true;
 
         if (isDirty()) {
+            Inventory oldInventory = this.inventory;
             this.inventory = createInventory();
+
+            if (oldInventory != null) {
+                for (HumanEntity viewer : new ArrayList<>(oldInventory.getViewers())) {
+                    viewer.openInventory(this.inventory);
+                }
+            }
+
             markChanges();
         }
 
@@ -134,24 +135,72 @@ public class ModernSmithingTableGui extends NamedGui implements InventoryBased {
 
         getInputComponent().display(getInventory(), 0);
         getResultComponent().display(getInventory(), 3);
-        getPlayerInventoryComponent().display();
+        getPlayerGuiComponent().display();
 
-        if (getPlayerInventoryComponent().hasItem()) {
+        for (HumanEntity viewer : getViewers()) {
+            ItemStack cursor = viewer.getItemOnCursor();
+            viewer.setItemOnCursor(new ItemStack(Material.AIR));
+
+            populateBottomInventory(viewer);
+
+            viewer.setItemOnCursor(cursor);
+        }
+
+        if (!super.updating) {
+            throw new AssertionError("Gui#isUpdating became false before Gui#update finished");
+        }
+
+        super.updating = false;
+    }
+
+    @NotNull
+    @Contract(pure = true)
+    @Override
+    public Iterable<? extends GuiItem> getItems() {
+        Collection<@NotNull GuiItem> items = new HashSet<>();
+
+        for (Pane pane : getInputComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getResultComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getPlayerGuiComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        return items;
+    }
+
+    @Override
+    public void show(@NotNull HumanEntity humanEntity) {
+        if (isDirty()) {
+            update();
+        }
+
+        populateBottomInventory(humanEntity);
+
+        humanEntity.openInventory(getInventory());
+    }
+
+    /**
+     * Populates the inventory of the {@link HumanEntity} if needed.
+     *
+     * @param humanEntity the human entity
+     * @since 0.11.4
+     */
+    private void populateBottomInventory(@NotNull HumanEntity humanEntity) {
+        if (getPlayerGuiComponent().hasItem()) {
             HumanEntityCache humanEntityCache = getHumanEntityCache();
 
             if (!humanEntityCache.contains(humanEntity)) {
                 humanEntityCache.storeAndClear(humanEntity);
             }
 
-            getPlayerInventoryComponent().placeItems(humanEntity.getInventory(), 0);
+            getPlayerGuiComponent().placeItems(humanEntity.getInventory(), 0);
         }
-
-        Inventory inventory = smithingTableInventory.openInventory((Player) humanEntity, getTitleHolder(),
-                getTopItems());
-
-        addInventory(inventory, this);
-
-        this.viewers.add(humanEntity);
     }
 
     @NotNull
@@ -162,7 +211,7 @@ public class ModernSmithingTableGui extends NamedGui implements InventoryBased {
 
         gui.inputComponent = inputComponent.copy();
         gui.resultComponent = resultComponent.copy();
-        gui.playerInventoryComponent = playerInventoryComponent.copy();
+        gui.playerGuiComponent = this.playerGuiComponent.copy();
 
         gui.setOnTopClick(this.onTopClick);
         gui.setOnBottomClick(this.onBottomClick);
@@ -182,7 +231,7 @@ public class ModernSmithingTableGui extends NamedGui implements InventoryBased {
         } else if (rawSlot == 3) {
             getResultComponent().click(this, event, 0);
         } else {
-            getPlayerInventoryComponent().click(this, event, rawSlot - 4);
+            getPlayerGuiComponent().click(this, event, rawSlot - 4);
         }
     }
 
@@ -199,90 +248,67 @@ public class ModernSmithingTableGui extends NamedGui implements InventoryBased {
     @Contract(pure = true)
     @Override
     public boolean isPlayerInventoryUsed() {
-        return getPlayerInventoryComponent().hasItem();
+        return getPlayerGuiComponent().hasItem();
     }
 
     @NotNull
     @Contract(pure = true)
     @Override
     public Inventory createInventory() {
-        return getTitleHolder().asInventoryTitle(this, InventoryType.SMITHING_NEW);
-    }
+        Inventory inventory = this.smithingTableInventory.createInventory(getTitleHolder());
 
-    /**
-     * Handles a human entity closing this gui.
-     *
-     * @param humanEntity the human entity closing the gui
-     * @since 0.10.9
-     */
-    public void handleClose(@NotNull HumanEntity humanEntity) {
-        this.viewers.remove(humanEntity);
+        addInventory(inventory, this);
+
+        return inventory;
     }
 
     @Contract(pure = true)
     @Override
     public int getViewerCount() {
-        return this.viewers.size();
+        return getInventory().getViewers().size();
     }
 
     @NotNull
     @Contract(pure = true)
     @Override
     public List<HumanEntity> getViewers() {
-        return new ArrayList<>(this.viewers);
+        return new ArrayList<>(getInventory().getViewers());
     }
 
     /**
-     * Gets the inventory component representing the input items
+     * Gets the gui component representing the input items
      *
      * @return the input component
      * @since 0.10.9
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getInputComponent() {
+    public GuiComponent getInputComponent() {
         return inputComponent;
     }
 
     /**
-     * Gets the inventory component representing the result
+     * Gets the gui component representing the result
      *
      * @return the result component
      * @since 0.10.9
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getResultComponent() {
+    public GuiComponent getResultComponent() {
         return resultComponent;
     }
 
     /**
-     * Gets the inventory component representing the player inventory
+     * Gets the gui component representing the player inventory
      *
-     * @return the player inventory component
+     * @return the player gui component
      * @since 0.10.9
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getPlayerInventoryComponent() {
-        return playerInventoryComponent;
-    }
-
-    /**
-     * Gets the top items
-     *
-     * @return the top items
-     * @since 0.10.9
-     */
-    @Nullable
-    @Contract(pure = true)
-    private ItemStack[] getTopItems() {
-        return new ItemStack[] {
-            getInputComponent().getItem(0, 0),
-            getInputComponent().getItem(1, 0),
-            getInputComponent().getItem(2, 0),
-            getResultComponent().getItem(0, 0)
-        };
+    public GuiComponent getPlayerGuiComponent() {
+        return this.playerGuiComponent;
     }
 
     /**
@@ -353,7 +379,7 @@ public class ModernSmithingTableGui extends NamedGui implements InventoryBased {
                 throw new XMLLoadException("Component tag does not have a name specified");
             }
 
-            InventoryComponent component;
+            GuiComponent component;
 
             switch (componentElement.getAttribute("name")) {
                 case "input":
@@ -363,7 +389,7 @@ public class ModernSmithingTableGui extends NamedGui implements InventoryBased {
                     component = smithingTableGui.getResultComponent();
                     break;
                 case "player-inventory":
-                    component = smithingTableGui.getPlayerInventoryComponent();
+                    component = smithingTableGui.getPlayerGuiComponent();
                     break;
                 default:
                     throw new XMLLoadException("Unknown component name");

@@ -4,17 +4,19 @@ import com.github.stefvanschie.inventoryframework.HumanEntityCache;
 import com.github.stefvanschie.inventoryframework.abstraction.AnvilInventory;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.util.InventoryBased;
 import com.github.stefvanschie.inventoryframework.gui.type.util.NamedGui;
+import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.util.version.Version;
 import com.github.stefvanschie.inventoryframework.util.version.VersionMatcher;
+import org.bukkit.Material;
 import org.bukkit.entity.HumanEntity;
-import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Contract;
@@ -51,41 +53,34 @@ public class AnvilGui extends NamedGui implements InventoryBased {
     private Consumer<? super String> onNameInputChanged = (name) -> {};
 
     /**
-     * Represents the inventory component for the first item
+     * Represents the gui component for the first item
      */
     @NotNull
-    private InventoryComponent firstItemComponent = new InventoryComponent(1, 1);
+    private GuiComponent firstItemComponent = new GuiComponent(1, 1);
 
     /**
-     * Represents the inventory component for the second item
+     * Represents the gui component for the second item
      */
     @NotNull
-    private InventoryComponent secondItemComponent = new InventoryComponent(1, 1);
+    private GuiComponent secondItemComponent = new GuiComponent(1, 1);
 
     /**
-     * Represents the inventory component for the result
+     * Represents the gui component for the result
      */
     @NotNull
-    private InventoryComponent resultComponent = new InventoryComponent(1, 1);
+    private GuiComponent resultComponent = new GuiComponent(1, 1);
 
     /**
-     * Represents the inventory component for the player inventory
+     * Represents the gui component for the player inventory
      */
     @NotNull
-    private InventoryComponent playerInventoryComponent = new InventoryComponent(9, 4);
+    private GuiComponent playerGuiComponent = new GuiComponent(9, 4);
 
     /**
      * An internal anvil inventory
      */
     @NotNull
-    private final AnvilInventory anvilInventory = VersionMatcher.newAnvilInventory(Version.getVersion(),
-        this);
-
-    /**
-     * The viewers of this gui
-     */
-    @NotNull
-    private final Collection<HumanEntity> viewers = new HashSet<>();
+    private final AnvilInventory anvilInventory = VersionMatcher.newAnvilInventory(Version.getVersion());
 
     /**
      * Constructs a new anvil gui
@@ -140,13 +135,19 @@ public class AnvilGui extends NamedGui implements InventoryBased {
     }
 
     @Override
-    public void show(@NotNull HumanEntity humanEntity) {
-        if (!(humanEntity instanceof Player)) {
-            throw new IllegalArgumentException("Anvils can only be opened by players");
-        }
+    public void update() {
+        super.updating = true;
 
         if (isDirty()) {
+            Inventory oldInventory = this.inventory;
             this.inventory = createInventory();
+
+            if (oldInventory != null) {
+                for (HumanEntity viewer : new ArrayList<>(oldInventory.getViewers())) {
+                    viewer.openInventory(this.inventory);
+                }
+            }
+
             markChanges();
         }
 
@@ -156,23 +157,100 @@ public class AnvilGui extends NamedGui implements InventoryBased {
         getSecondItemComponent().display(getInventory(), 1);
         getResultComponent().display(getInventory(), 2);
 
-        getPlayerInventoryComponent().display();
+        getPlayerGuiComponent().display();
 
-        if (getPlayerInventoryComponent().hasItem()) {
+        HumanEntityCache humanEntityCache = getHumanEntityCache();
+
+        for (HumanEntity viewer : getViewers()) {
+            ItemStack cursor = viewer.getItemOnCursor();
+            viewer.setItemOnCursor(new ItemStack(Material.AIR));
+
+            populateBottomInventory(viewer);
+
+            viewer.setItemOnCursor(cursor);
+        }
+
+        if (!super.updating) {
+            throw new AssertionError("Gui#isUpdating became false before Gui#update finished");
+        }
+
+        super.updating = false;
+    }
+
+    @NotNull
+    @Contract(pure = true)
+    @Override
+    public Iterable<? extends GuiItem> getItems() {
+        Collection<GuiItem> items = new HashSet<>();
+
+        for (Pane pane : getFirstItemComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getSecondItemComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getResultComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getPlayerGuiComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        return items;
+    }
+
+    @Override
+    public void show(@NotNull HumanEntity humanEntity) {
+        if (isDirty()) {
+            update();
+        }
+
+        populateBottomInventory(humanEntity);
+
+        // NOVAVERSE: hook for pre-populating rename text field
+        beforeOpen();
+
+        humanEntity.openInventory(getInventory());
+    }
+
+    // NOVAVERSE-START: setText support — sets slot 0 display name so client pre-fills rename field
+    protected void beforeOpen() {
+        String initialText = anvilInventory.getRenameText();
+        if (initialText.isEmpty()) return;
+
+        ItemStack slot0 = getInventory().getItem(0);
+        ItemStack textItem = (slot0 == null || slot0.getType() == Material.AIR)
+            ? new ItemStack(Material.PAPER)
+            : slot0.clone();
+
+        ItemMeta meta = textItem.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(initialText);
+            textItem.setItemMeta(meta);
+        }
+        getInventory().setItem(0, textItem);
+    }
+    // NOVAVERSE-END
+
+    /**
+     * Populates the inventory of the {@link HumanEntity} if needed.
+     *
+     * @param humanEntity the human entity
+     * @since 0.11.4
+     */
+    private void populateBottomInventory(@NotNull HumanEntity humanEntity) {
+        if (getPlayerGuiComponent().hasItem()) {
             HumanEntityCache humanEntityCache = getHumanEntityCache();
 
             if (!humanEntityCache.contains(humanEntity)) {
                 humanEntityCache.storeAndClear(humanEntity);
             }
 
-            getPlayerInventoryComponent().placeItems(humanEntity.getInventory(), 0);
+            getPlayerGuiComponent().placeItems(humanEntity.getInventory(), 0);
         }
-
-        Inventory inventory = anvilInventory.openInventory((Player) humanEntity, getTitleHolder(), getTopItems());
-
-        addInventory(inventory, this);
-
-        this.viewers.add(humanEntity);
     }
 
     @NotNull
@@ -184,7 +262,7 @@ public class AnvilGui extends NamedGui implements InventoryBased {
         gui.firstItemComponent = firstItemComponent.copy();
         gui.secondItemComponent = secondItemComponent.copy();
         gui.resultComponent = resultComponent.copy();
-        gui.playerInventoryComponent = playerInventoryComponent.copy();
+        gui.playerGuiComponent = playerGuiComponent.copy();
 
         gui.setOnTopClick(this.onTopClick);
         gui.setOnBottomClick(this.onBottomClick);
@@ -206,7 +284,7 @@ public class AnvilGui extends NamedGui implements InventoryBased {
         } else if (rawSlot == 2) {
             getResultComponent().click(this, event, 0);
         } else {
-            getPlayerInventoryComponent().click(this, event, rawSlot - 3);
+            getPlayerGuiComponent().click(this, event, rawSlot - 3);
         }
     }
 
@@ -241,7 +319,11 @@ public class AnvilGui extends NamedGui implements InventoryBased {
     @Contract(pure = true)
     @Override
     public Inventory createInventory() {
-        return getTitleHolder().asInventoryTitle(this, InventoryType.ANVIL);
+        Inventory inventory = this.anvilInventory.createInventory(getTitleHolder());
+
+        addInventory(inventory, this);
+
+        return inventory;
     }
 
     /**
@@ -272,67 +354,20 @@ public class AnvilGui extends NamedGui implements InventoryBased {
     @Contract(pure = true)
     @Override
     public boolean isPlayerInventoryUsed() {
-        return getPlayerInventoryComponent().hasItem();
+        return getPlayerGuiComponent().hasItem();
     }
 
     @Contract(pure = true)
     @Override
     public int getViewerCount() {
-        return this.viewers.size();
+        return getInventory().getViewers().size();
     }
 
     @NotNull
     @Contract(pure = true)
     @Override
     public List<HumanEntity> getViewers() {
-        return new ArrayList<>(this.viewers);
-    }
-
-    /**
-     * Handles an incoming inventory click event
-     *
-     * @param event the event to handle
-     * @since 0.8.0
-     * @deprecated no longer used internally
-     */
-    @Deprecated
-    public void handleClickEvent(@NotNull InventoryClickEvent event) {
-        int slot = event.getRawSlot();
-        Player player = (Player) event.getWhoClicked();
-
-        if (slot >= 3 && slot <= 38) {
-            anvilInventory.sendItems(player, getTopItems());
-        } else if (slot == 0 || slot == 1) {
-            if (event.isCancelled()) {
-                if (slot == 0) {
-                    anvilInventory.sendFirstItem(player, getFirstItemComponent().getItem(0, 0));
-                } else {
-                    anvilInventory.sendSecondItem(player, getSecondItemComponent().getItem(0, 0));
-                }
-
-                anvilInventory.clearCursor(player);
-            }
-
-            anvilInventory.sendResultItem(player, getResultComponent().getItem(0, 0));
-        } else if (slot == 2 && !event.isCancelled()) {
-            anvilInventory.clearResultItem(player);
-
-            ItemStack resultItem = getResultComponent().getItem(0, 0);
-
-            if (resultItem != null) {
-                anvilInventory.setCursor(player, resultItem);
-            }
-        }
-    }
-
-    /**
-     * Handles a human entity closing this gui.
-     *
-     * @param humanEntity the human entity closing the gui
-     * @since 0.10.1
-     */
-    public void handleClose(@NotNull HumanEntity humanEntity) {
-        this.viewers.remove(humanEntity);
+        return new ArrayList<>(getInventory().getViewers());
     }
 
     /**
@@ -365,67 +400,51 @@ public class AnvilGui extends NamedGui implements InventoryBased {
     }
 
     /**
-     * Gets the inventory component representing the first item
+     * Gets the gui component representing the first item
      *
      * @return the first item component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getFirstItemComponent() {
+    public GuiComponent getFirstItemComponent() {
         return firstItemComponent;
     }
 
     /**
-     * Gets the inventory component representing the second item
+     * Gets the gui component representing the second item
      *
      * @return the second item component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getSecondItemComponent() {
+    public GuiComponent getSecondItemComponent() {
         return secondItemComponent;
     }
 
     /**
-     * Gets the inventory component representing the result
+     * Gets the gui component representing the result
      *
      * @return the result component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getResultComponent() {
+    public GuiComponent getResultComponent() {
         return resultComponent;
     }
 
     /**
-     * Gets the inventory component representing the player inventory
+     * Gets the gui component representing the player inventory
      *
-     * @return the player inventory component
+     * @return the player gui component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getPlayerInventoryComponent() {
-        return playerInventoryComponent;
-    }
-
-    /**
-     * Gets the top items
-     *
-     * @return the top items
-     * @since 0.8.0
-     */
-    @Nullable
-    @Contract(pure = true)
-    private ItemStack[] getTopItems() {
-        return new ItemStack[] {
-            getFirstItemComponent().getItem(0, 0),
-            getSecondItemComponent().getItem(0, 0),
-            getResultComponent().getItem(0, 0)
-        };
+    public GuiComponent getPlayerGuiComponent() {
+        return this.playerGuiComponent;
     }
 
     /**
@@ -496,7 +515,7 @@ public class AnvilGui extends NamedGui implements InventoryBased {
                 throw new XMLLoadException("Component tag does not have a name specified");
             }
 
-            InventoryComponent component;
+            GuiComponent component;
 
             switch (componentElement.getAttribute("name")) {
                 case "first-item":
@@ -509,7 +528,7 @@ public class AnvilGui extends NamedGui implements InventoryBased {
                     component = anvilGui.getResultComponent();
                     break;
                 case "player-inventory":
-                    component = anvilGui.getPlayerInventoryComponent();
+                    component = anvilGui.getPlayerGuiComponent();
                     break;
                 default:
                     throw new XMLLoadException("Unknown component name");

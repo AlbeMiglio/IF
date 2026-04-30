@@ -3,16 +3,19 @@ package com.github.stefvanschie.inventoryframework.gui.type;
 import com.github.stefvanschie.inventoryframework.HumanEntityCache;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
 import com.github.stefvanschie.inventoryframework.gui.type.util.InventoryBased;
 import com.github.stefvanschie.inventoryframework.gui.type.util.MergedGui;
 import com.github.stefvanschie.inventoryframework.gui.type.util.NamedGui;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
+import com.github.stefvanschie.inventoryframework.pane.util.Slot;
+import org.bukkit.Material;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Contract;
@@ -41,10 +44,10 @@ import java.util.stream.Collectors;
 public class EnderChestGui extends NamedGui implements MergedGui, InventoryBased {
 
     /**
-     * Represents the inventory component for the entire gui
+     * Represents the gui component for the entire gui
      */
     @NotNull
-    private InventoryComponent inventoryComponent = new InventoryComponent(9, 7);
+    private GuiComponent guiComponent = new GuiComponent(9, 7);
 
     /**
      * Constructs a new GUI
@@ -91,22 +94,65 @@ public class EnderChestGui extends NamedGui implements MergedGui, InventoryBased
     }
 
     @Override
-    public void show(@NotNull HumanEntity humanEntity) {
+    public void update() {
+        super.updating = true;
+
         if (isDirty()) {
+            Inventory oldInventory = this.inventory;
             this.inventory = createInventory();
+
+            if (oldInventory != null) {
+                for (HumanEntity viewer : new ArrayList<>(oldInventory.getViewers())) {
+                    viewer.openInventory(this.inventory);
+                }
+            }
+
             markChanges();
         }
 
         getInventory().clear();
 
-        int height = getInventoryComponent().getHeight();
+        int height = getGuiComponent().getHeight();
 
-        getInventoryComponent().display();
+        getGuiComponent().display();
+        getGuiComponent().excludeRows(height - 4, height - 1).placeItems(getInventory(), 0);
 
-        InventoryComponent topComponent = getInventoryComponent().excludeRows(height - 4, height - 1);
-        InventoryComponent bottomComponent = getInventoryComponent().excludeRows(0, height - 5);
+        for (HumanEntity viewer : getViewers()) {
+            ItemStack cursor = viewer.getItemOnCursor();
+            viewer.setItemOnCursor(new ItemStack(Material.AIR));
 
-        topComponent.placeItems(getInventory(), 0);
+            populateBottomInventory(viewer);
+
+            viewer.setItemOnCursor(cursor);
+        }
+
+        if (!super.updating) {
+            throw new AssertionError("Gui#isUpdating became false before Gui#update finished");
+        }
+
+        super.updating = false;
+    }
+
+    @Override
+    public void show(@NotNull HumanEntity humanEntity) {
+        if (isDirty()) {
+            update();
+        }
+
+        populateBottomInventory(humanEntity);
+
+        humanEntity.openInventory(getInventory());
+    }
+
+    /**
+     * Populates the inventory of the {@link HumanEntity} if needed.
+     *
+     * @param humanEntity the human entity
+     * @since 0.11.4
+     */
+    private void populateBottomInventory(@NotNull HumanEntity humanEntity) {
+        int height = getGuiComponent().getHeight();
+        GuiComponent bottomComponent = getGuiComponent().excludeRows(0, height - 5);
 
         if (bottomComponent.hasItem()) {
             HumanEntityCache humanEntityCache = getHumanEntityCache();
@@ -117,8 +163,6 @@ public class EnderChestGui extends NamedGui implements MergedGui, InventoryBased
 
             bottomComponent.placeItems(humanEntity.getInventory(), 0);
         }
-
-        humanEntity.openInventory(getInventory());
     }
 
     @NotNull
@@ -127,7 +171,7 @@ public class EnderChestGui extends NamedGui implements MergedGui, InventoryBased
     public EnderChestGui copy() {
         EnderChestGui gui = new EnderChestGui(getTitleHolder(), super.plugin);
 
-        gui.inventoryComponent = inventoryComponent.copy();
+        gui.guiComponent = this.guiComponent.copy();
 
         gui.setOnTopClick(this.onTopClick);
         gui.setOnBottomClick(this.onBottomClick);
@@ -151,24 +195,24 @@ public class EnderChestGui extends NamedGui implements MergedGui, InventoryBased
     @Contract(pure = true)
     @Override
     public boolean isPlayerInventoryUsed() {
-        return getInventoryComponent().excludeRows(0, getInventoryComponent().getHeight() - 5).hasItem();
+        return getGuiComponent().excludeRows(0, getGuiComponent().getHeight() - 5).hasItem();
     }
 
     @Override
     public void click(@NotNull InventoryClickEvent event) {
-        getInventoryComponent().click(this, event, event.getRawSlot());
+        getGuiComponent().click(this, event, event.getRawSlot());
     }
 
     @Override
-    public void addPane(@NotNull Pane pane) {
-        this.inventoryComponent.addPane(pane);
+    public void addPane(@NotNull Slot slot, @NotNull Pane pane) {
+        this.guiComponent.addPane(slot, pane);
     }
 
     @NotNull
     @Contract(pure = true)
     @Override
     public List<Pane> getPanes() {
-        return this.inventoryComponent.getPanes();
+        return this.guiComponent.getPanes();
     }
 
     @NotNull
@@ -201,8 +245,8 @@ public class EnderChestGui extends NamedGui implements MergedGui, InventoryBased
     @NotNull
     @Contract(pure = true)
     @Override
-    public InventoryComponent getInventoryComponent() {
-        return inventoryComponent;
+    public GuiComponent getGuiComponent() {
+        return this.guiComponent;
     }
 
     /**
@@ -265,12 +309,12 @@ public class EnderChestGui extends NamedGui implements MergedGui, InventoryBased
             }
 
             Element componentElement = (Element) item;
-            InventoryComponent inventoryComponent = enderChestGui.getInventoryComponent();
+            GuiComponent guiComponent = enderChestGui.getGuiComponent();
 
             if (componentElement.getTagName().equalsIgnoreCase("component")) {
-                inventoryComponent.load(instance, componentElement, plugin);
+                guiComponent.load(instance, componentElement, plugin);
             } else {
-                inventoryComponent.load(instance, element, plugin);
+                guiComponent.load(instance, element, plugin);
             }
 
             break;

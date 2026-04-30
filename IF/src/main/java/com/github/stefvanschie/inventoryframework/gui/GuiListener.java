@@ -1,19 +1,25 @@
 package com.github.stefvanschie.inventoryframework.gui;
 
+import com.github.stefvanschie.inventoryframework.HumanEntityCache;
 import com.github.stefvanschie.inventoryframework.gui.type.*;
 import com.github.stefvanschie.inventoryframework.gui.type.util.Gui;
+import com.github.stefvanschie.inventoryframework.gui.type.util.NamedGui;
 import com.github.stefvanschie.inventoryframework.util.InventoryViewUtil;
+import com.github.stefvanschie.inventoryframework.util.UUIDTagType;
 import org.bukkit.Bukkit;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.LivingEntity;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.*;
+import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.inventory.*;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
@@ -92,127 +98,6 @@ public class GuiListener implements Listener {
                 playerInventory.setItemInOffHand(playerInventory.getItemInOffHand());
             });
         }
-    }
-
-    /**
-     * Resets the items into the correct positions for anvil guis
-     *
-     * @param event the event fired
-     * @since 0.8.0
-     * @deprecated no longer used internally
-     */
-    @Deprecated
-    public void resetItemsAnvil(@NotNull InventoryClickEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
-
-        if (!(holder instanceof AnvilGui) || !(event.getWhoClicked() instanceof Player)) {
-            return;
-        }
-
-        ((AnvilGui) holder).handleClickEvent(event);
-    }
-
-    /**
-     * Resets the items into the correct positions for beacon guis
-     *
-     * @param event the event fired
-     * @since 0.8.0
-     */
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void resetItemsBeacon(@NotNull InventoryClickEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
-
-        if (!(holder instanceof BeaconGui) || !(event.getWhoClicked() instanceof Player)) {
-            return;
-        }
-
-        ((BeaconGui) holder).handleClickEvent(event);
-    }
-
-    /**
-     * Resets the items into the correct positions for cartography table guis
-     *
-     * @param event the event fired
-     * @since 0.8.0
-     */
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void resetItemsCartographyTable(@NotNull InventoryClickEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
-
-        if (!(holder instanceof CartographyTableGui) || !(event.getWhoClicked() instanceof Player)) {
-            return;
-        }
-
-        ((CartographyTableGui) holder).handleClickEvent(event);
-    }
-
-    /**
-     * Resets the items into the correct positions for enchanting table guis
-     *
-     * @param event the event fired
-     * @since 0.8.0
-     */
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void resetItemsEnchantingTable(@NotNull InventoryClickEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
-
-        if (!(holder instanceof EnchantingTableGui) || !(event.getWhoClicked() instanceof Player)) {
-            return;
-        }
-
-        ((EnchantingTableGui) holder).handleClickEvent(event);
-    }
-
-    /**
-     * Resets the items into the correct positions for grindstone guis
-     *
-     * @param event the event fired
-     * @since 0.8.0
-     * @deprecated no longer used internally
-     */
-    @Deprecated
-    public void resetItemsGrindstone(@NotNull InventoryClickEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
-
-        if (!(holder instanceof GrindstoneGui) || !(event.getWhoClicked() instanceof Player)) {
-            return;
-        }
-
-        ((GrindstoneGui) holder).handleClickEvent(event);
-    }
-
-    /**
-     * Resets the items into the correct positions for stonecutter guis
-     *
-     * @param event the event fired
-     * @since 0.8.0
-     */
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void resetItemsStonecutter(@NotNull InventoryClickEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
-
-        if (!(holder instanceof StonecutterGui) || !(event.getWhoClicked() instanceof Player)) {
-            return;
-        }
-
-        ((StonecutterGui) holder).handleClickEvent(event);
-    }
-
-    /**
-     * Resets the items into the correct positions for smithing table guis
-     *
-     * @param event the event fired
-     * @since 0.8.0
-     */
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void resetItemsSmithingTable(@NotNull InventoryClickEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
-
-        if (!(holder instanceof SmithingTableGui) || !(event.getWhoClicked() instanceof Player)) {
-            return;
-        }
-
-        ((SmithingTableGui) holder).handleClickEvent(event);
     }
 
     /**
@@ -345,7 +230,7 @@ public class GuiListener implements Listener {
     public void onInventoryClose(@NotNull InventoryCloseEvent event) {
         Gui gui = getGui(event.getInventory());
 
-        if (gui == null) {
+        if (gui == null || isNamedGuiUpdatingDirtily(gui)) {
             return;
         }
 
@@ -355,28 +240,81 @@ public class GuiListener implements Listener {
         //due to a client issue off-hand items appear as ghost items, this updates the off-hand correctly client-side
         playerInventory.setItemInOffHand(playerInventory.getItemInOffHand());
 
-        if (!gui.isUpdating()) {
-            gui.callOnClose(event);
+        gui.callOnClose(event);
 
-            event.getInventory().clear(); //clear inventory to prevent items being put back
+        HumanEntityCache humanEntityCache = gui.getHumanEntityCache();
 
-            gui.getHumanEntityCache().restoreAndForget(humanEntity);
+        if (humanEntityCache.contains(humanEntity)) {
+            humanEntityCache.restoreAndForget(humanEntity);
+        } else {
+            for (ItemStack itemStack : humanEntity.getInventory()) {
+                if (itemStack == null || !itemStack.hasItemMeta()) {
+                    continue;
+                }
 
-            if (gui.getViewerCount() == 1) {
-                activeGuiInstances.remove(gui);
+                ItemMeta itemMeta = itemStack.getItemMeta();
+
+                assert itemMeta != null;
+
+                PersistentDataContainer persistentDataContainer = itemMeta.getPersistentDataContainer();
+
+                for (GuiItem item : gui.getItems()) {
+                    NamespacedKey key = item.getKey();
+
+                    if (persistentDataContainer.has(key, UUIDTagType.INSTANCE)) {
+                        persistentDataContainer.remove(key);
+                        break;
+                    }
+                }
+
+                itemStack.setItemMeta(itemMeta);
             }
-
-            if (gui instanceof AnvilGui) {
-                ((AnvilGui) gui).handleClose(humanEntity);
-            } else if (gui instanceof MerchantGui) {
-                ((MerchantGui) gui).handleClose(humanEntity);
-            } else if (gui instanceof ModernSmithingTableGui) {
-                ((ModernSmithingTableGui) gui).handleClose(humanEntity);
-            }
-
-            //Bukkit doesn't like it if you open an inventory while the previous one is being closed
-            Bukkit.getScheduler().runTask(this.plugin, () -> gui.navigateToParent(humanEntity));
         }
+
+        if (gui.getViewerCount() == 1) {
+            activeGuiInstances.remove(gui);
+        }
+
+        //Bukkit doesn't like it if you open an inventory while the previous one is being closed
+        Bukkit.getScheduler().runTask(this.plugin, () -> gui.navigateToParent(humanEntity));
+    }
+
+    /**
+     * Handles removing identifiers from gui items when an item is dropped from the gui.
+     *
+     * @param event the event fired
+     * @since 0.12.0
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onPlayerDropItem(@NotNull PlayerDropItemEvent event) {
+        Gui gui = getGui(InventoryViewUtil.getInstance().getTopInventory(event.getPlayer().getOpenInventory()));
+
+        if (gui == null) {
+            return;
+        }
+
+        ItemStack itemStack = event.getItemDrop().getItemStack();
+
+        if (!itemStack.hasItemMeta()) {
+            return;
+        }
+
+        ItemMeta itemMeta = itemStack.getItemMeta();
+
+        assert itemMeta != null;
+
+        PersistentDataContainer persistentDataContainer = itemMeta.getPersistentDataContainer();
+
+        for (GuiItem item : gui.getItems()) {
+            NamespacedKey key = item.getKey();
+
+            if (persistentDataContainer.has(key, UUIDTagType.INSTANCE)) {
+                persistentDataContainer.remove(key);
+                break;
+            }
+        }
+
+        itemStack.setItemMeta(itemMeta);
     }
 
     /**
@@ -389,7 +327,7 @@ public class GuiListener implements Listener {
     public void onInventoryOpen(@NotNull InventoryOpenEvent event) {
         Gui gui = getGui(event.getInventory());
 
-        if (gui == null) {
+        if (gui == null || isNamedGuiUpdatingDirtily(gui)) {
             return;
         }
 
@@ -451,4 +389,11 @@ public class GuiListener implements Listener {
 
         return null;
     }
+
+    private boolean isNamedGuiUpdatingDirtily(@NotNull Gui gui) {
+        boolean dirtyTitle = gui instanceof NamedGui && (((NamedGui) gui).isDirty());
+        boolean dirtyRows = gui instanceof ChestGui && ((ChestGui) gui).isDirtyRows();
+        return gui.isUpdating() && (dirtyTitle || dirtyRows);
+    }
+
 }

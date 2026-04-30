@@ -5,13 +5,15 @@
     <parent>
         <artifactId>IF-parent</artifactId>
         <groupId>com.github.stefvanschie.inventoryframework</groupId>
-        <version>0.10.20-SNAPSHOT</version>
+        <version>0.12.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>IF</artifactId>
     <packaging>jar</packaging>
+
+    <name>IF</name>
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
@@ -28,6 +30,18 @@
         </repository>
     </repositories>
 
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>6.0.3</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>net.kyori</groupId>
@@ -43,7 +57,7 @@
         </dependency>
         <dependency>
             <groupId>com.github.stefvanschie.inventoryframework</groupId>
-            <artifactId>1_17_0</artifactId>
+            <artifactId>1_16_5</artifactId>
             <version>${project.version}</version>
             <scope>compile</scope>
         </dependency>
@@ -55,43 +69,7 @@
         </dependency>
         <dependency>
             <groupId>com.github.stefvanschie.inventoryframework</groupId>
-            <artifactId>1_18_0</artifactId>
-            <version>${project.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.stefvanschie.inventoryframework</groupId>
-            <artifactId>1_18_1</artifactId>
-            <version>${project.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.stefvanschie.inventoryframework</groupId>
             <artifactId>1_18_2</artifactId>
-            <version>${project.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.stefvanschie.inventoryframework</groupId>
-            <artifactId>1_19_0</artifactId>
-            <version>${project.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.stefvanschie.inventoryframework</groupId>
-            <artifactId>1_19_1</artifactId>
-            <version>${project.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.stefvanschie.inventoryframework</groupId>
-            <artifactId>1_19_2</artifactId>
-            <version>${project.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.stefvanschie.inventoryframework</groupId>
-            <artifactId>1_19_3</artifactId>
             <version>${project.version}</version>
             <scope>compile</scope>
         </dependency>
@@ -163,6 +141,36 @@
         </dependency>
         <dependency>
             <groupId>com.github.stefvanschie.inventoryframework</groupId>
+            <artifactId>1_21_5</artifactId>
+            <version>${project.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.stefvanschie.inventoryframework</groupId>
+            <artifactId>1_21_6-8</artifactId>
+            <version>${project.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.stefvanschie.inventoryframework</groupId>
+            <artifactId>1_21_9-10</artifactId>
+            <version>${project.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.stefvanschie.inventoryframework</groupId>
+            <artifactId>1_21_11</artifactId>
+            <version>${project.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.stefvanschie.inventoryframework</groupId>
+            <artifactId>26_1</artifactId>
+            <version>${project.version}</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.stefvanschie.inventoryframework</groupId>
             <artifactId>iv-abstraction</artifactId>
             <version>${project.version}</version>
             <scope>compile</scope>
@@ -182,7 +190,7 @@
         <dependency>
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
-            <version>1.20.3-R0.1-SNAPSHOT</version>
+            <version>1.20.3-R0.1-20231207.085553-9</version>
             <scope>provided</scope>
             <exclusions>
                 <!-- Provided, but not accessible -->
@@ -208,7 +216,16 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>5.11.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-suite</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-params</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -228,7 +245,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.2.7</version>
+                        <version>3.2.8</version>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
@@ -251,19 +268,12 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.2</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>org.apache.maven.surefire</groupId>
-                        <artifactId>surefire-junit-platform </artifactId>
-                        <version>3.5.2</version>
-                    </dependency>
-                </dependencies>
+                <version>3.5.5</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.6.2</version>
                 <executions>
                     <execution>
                         <phase>package</phase>
@@ -276,7 +286,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>3.3.1</version>
+                <version>3.4.0</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -289,7 +299,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.11.2</version>
+                <version>3.12.0</version>
                 <executions>
                     <execution>
                         <id>attach-javadocs</id>

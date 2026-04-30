@@ -12,7 +12,7 @@ public class StaticNullablePaneTest {
 
     @Test
     void testCopy() {
-        StaticNullablePane original = new StaticNullablePane(5, 1, 1, 1, Pane.Priority.MONITOR);
+        StaticNullablePane original = new StaticNullablePane(1, 1, Pane.Priority.MONITOR);
         original.setVisible(false);
         original.setRotation(90);
         original.flipHorizontally(false);
@@ -22,8 +22,6 @@ public class StaticNullablePaneTest {
 
         assertNotSame(original, copy);
 
-        assertEquals(original.getX(), copy.getX());
-        assertEquals(original.getY(), copy.getY());
         assertEquals(original.getLength(), copy.getLength());
         assertEquals(original.getHeight(), copy.getHeight());
         assertEquals(original.getPriority(), copy.getPriority());

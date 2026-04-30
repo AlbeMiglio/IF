@@ -3,13 +3,17 @@ package com.github.stefvanschie.inventoryframework.gui.type;
 import com.github.stefvanschie.inventoryframework.HumanEntityCache;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.util.InventoryBased;
 import com.github.stefvanschie.inventoryframework.gui.type.util.NamedGui;
+import com.github.stefvanschie.inventoryframework.pane.Pane;
+import org.bukkit.Material;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Contract;
@@ -26,6 +30,8 @@ import javax.xml.parsers.ParserConfigurationException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -36,28 +42,28 @@ import java.util.List;
 public class BlastFurnaceGui extends NamedGui implements InventoryBased {
 
     /**
-     * Represents the inventory component for the ingredient
+     * Represents the gui component for the ingredient
      */
     @NotNull
-    private InventoryComponent ingredientComponent = new InventoryComponent(1, 1);
+    private GuiComponent ingredientComponent = new GuiComponent(1, 1);
 
     /**
-     * Represents the inventory component for the fuel
+     * Represents the gui component for the fuel
      */
     @NotNull
-    private InventoryComponent fuelComponent = new InventoryComponent(1, 1);
+    private GuiComponent fuelComponent = new GuiComponent(1, 1);
 
     /**
-     * Represents the inventory component for the output
+     * Represents the gui component for the output
      */
     @NotNull
-    private InventoryComponent outputComponent = new InventoryComponent(1, 1);
+    private GuiComponent outputComponent = new GuiComponent(1, 1);
 
     /**
-     * Represents the inventory component for the player inventory
+     * Represents the gui component for the player inventory
      */
     @NotNull
-    private InventoryComponent playerInventoryComponent = new InventoryComponent(9, 4);
+    private GuiComponent playerGuiComponent = new GuiComponent(9, 4);
 
     /**
      * Constructs a new GUI
@@ -104,9 +110,19 @@ public class BlastFurnaceGui extends NamedGui implements InventoryBased {
     }
 
     @Override
-    public void show(@NotNull HumanEntity humanEntity) {
+    public void update() {
+        super.updating = true;
+
         if (isDirty()) {
+            Inventory oldInventory = this.inventory;
             this.inventory = createInventory();
+
+            if (oldInventory != null) {
+                for (HumanEntity viewer : new ArrayList<>(oldInventory.getViewers())) {
+                    viewer.openInventory(this.inventory);
+                }
+            }
+
             markChanges();
         }
 
@@ -115,19 +131,76 @@ public class BlastFurnaceGui extends NamedGui implements InventoryBased {
         getIngredientComponent().display(getInventory(), 0);
         getFuelComponent().display(getInventory(), 1);
         getOutputComponent().display(getInventory(), 2);
-        getPlayerInventoryComponent().display();
+        getPlayerGuiComponent().display();
 
-        if (getPlayerInventoryComponent().hasItem()) {
+        for (HumanEntity viewer : getViewers()) {
+            ItemStack cursor = viewer.getItemOnCursor();
+            viewer.setItemOnCursor(new ItemStack(Material.AIR));
+
+            populateBottomInventory(viewer);
+
+            viewer.setItemOnCursor(cursor);
+        }
+
+        if (!super.updating) {
+            throw new AssertionError("Gui#isUpdating became false before Gui#update finished");
+        }
+
+        super.updating = false;
+    }
+
+    @NotNull
+    @Contract(pure = true)
+    @Override
+    public Iterable<? extends GuiItem> getItems() {
+        Collection<@NotNull GuiItem> items = new HashSet<>();
+
+        for (Pane pane : getIngredientComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getFuelComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getOutputComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getPlayerGuiComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        return items;
+    }
+
+    @Override
+    public void show(@NotNull HumanEntity humanEntity) {
+        if (isDirty()) {
+            update();
+        }
+
+        populateBottomInventory(humanEntity);
+
+        humanEntity.openInventory(getInventory());
+    }
+
+    /**
+     * Populates the inventory of the {@link HumanEntity} if needed.
+     *
+     * @param humanEntity the human entity
+     * @since 0.11.4
+     */
+    private void populateBottomInventory(@NotNull HumanEntity humanEntity) {
+        if (getPlayerGuiComponent().hasItem()) {
             HumanEntityCache humanEntityCache = getHumanEntityCache();
 
             if (!humanEntityCache.contains(humanEntity)) {
                 humanEntityCache.storeAndClear(humanEntity);
             }
 
-            getPlayerInventoryComponent().placeItems(humanEntity.getInventory(), 0);
+            getPlayerGuiComponent().placeItems(humanEntity.getInventory(), 0);
         }
-
-        humanEntity.openInventory(getInventory());
     }
 
     @NotNull
@@ -139,7 +212,7 @@ public class BlastFurnaceGui extends NamedGui implements InventoryBased {
         gui.ingredientComponent = ingredientComponent.copy();
         gui.fuelComponent = fuelComponent.copy();
         gui.outputComponent = outputComponent.copy();
-        gui.playerInventoryComponent = playerInventoryComponent.copy();
+        gui.playerGuiComponent = this.playerGuiComponent.copy();
 
         gui.setOnTopClick(this.onTopClick);
         gui.setOnBottomClick(this.onBottomClick);
@@ -161,7 +234,7 @@ public class BlastFurnaceGui extends NamedGui implements InventoryBased {
         } else if (rawSlot == 2) {
             getOutputComponent().click(this, event, 0);
         } else {
-            getPlayerInventoryComponent().click(this, event, rawSlot - 3);
+            getPlayerGuiComponent().click(this, event, rawSlot - 3);
         }
     }
 
@@ -178,7 +251,7 @@ public class BlastFurnaceGui extends NamedGui implements InventoryBased {
     @Contract(pure = true)
     @Override
     public boolean isPlayerInventoryUsed() {
-        return getPlayerInventoryComponent().hasItem();
+        return getPlayerGuiComponent().hasItem();
     }
 
     @NotNull
@@ -202,51 +275,51 @@ public class BlastFurnaceGui extends NamedGui implements InventoryBased {
     }
 
     /**
-     * Gets the inventory component representing the ingredient
+     * Gets the gui component representing the ingredient
      *
      * @return the ingredient component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getIngredientComponent() {
+    public GuiComponent getIngredientComponent() {
         return ingredientComponent;
     }
 
     /**
-     * Gets the inventory component representing the fuel
+     * Gets the gui component representing the fuel
      *
      * @return the fuel component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getFuelComponent() {
+    public GuiComponent getFuelComponent() {
         return fuelComponent;
     }
 
     /**
-     * Gets the inventory component representing the output
+     * Gets the gui component representing the output
      *
      * @return the output component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getOutputComponent() {
+    public GuiComponent getOutputComponent() {
         return outputComponent;
     }
 
     /**
-     * Gets the inventory component representing the player inventory
+     * Gets the gui component representing the player inventory
      *
      * @return the player inventory component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getPlayerInventoryComponent() {
-        return playerInventoryComponent;
+    public GuiComponent getPlayerGuiComponent() {
+        return this.playerGuiComponent;
     }
 
     /**
@@ -318,7 +391,7 @@ public class BlastFurnaceGui extends NamedGui implements InventoryBased {
                 throw new XMLLoadException("Component tag does not have a name specified");
             }
 
-            InventoryComponent component;
+            GuiComponent component;
 
             switch (componentElement.getAttribute("name")) {
                 case "ingredient":
@@ -331,7 +404,7 @@ public class BlastFurnaceGui extends NamedGui implements InventoryBased {
                     component = blastFurnaceGui.getOutputComponent();
                     break;
                 case "player-inventory":
-                    component = blastFurnaceGui.getPlayerInventoryComponent();
+                    component = blastFurnaceGui.getPlayerGuiComponent();
                     break;
                 default:
                     throw new XMLLoadException("Unknown component name");

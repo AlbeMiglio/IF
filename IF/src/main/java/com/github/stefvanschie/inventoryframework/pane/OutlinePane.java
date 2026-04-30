@@ -1,9 +1,10 @@
 package com.github.stefvanschie.inventoryframework.pane;
 
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
 import com.github.stefvanschie.inventoryframework.gui.type.util.Gui;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
+import com.github.stefvanschie.inventoryframework.pane.util.GuiItemContainer;
 import com.github.stefvanschie.inventoryframework.pane.util.Mask;
 import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import com.github.stefvanschie.inventoryframework.util.GeometryUtil;
@@ -11,7 +12,6 @@ import org.bukkit.Material;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.w3c.dom.Element;
@@ -72,14 +72,13 @@ public class OutlinePane extends Pane implements Flippable, Orientable, Rotatabl
     /**
      * Creates a new outline pane
      *
-     * @param slot the slot of the pane
      * @param length the length of the pane
      * @param height the height of the pane
      * @param priority the priority of the pane
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public OutlinePane(@NotNull Slot slot, int length, int height, @NotNull Priority priority) {
-        super(slot, length, height, priority);
+    public OutlinePane(int length, int height, @NotNull Priority priority) {
+        super(length, height, priority);
 
         this.items = new ArrayList<>(length * height);
         this.orientation = Orientation.HORIZONTAL;
@@ -96,36 +95,22 @@ public class OutlinePane extends Pane implements Flippable, Orientable, Rotatabl
         this.mask = new Mask(mask);
     }
 
-    public OutlinePane(int x, int y, int length, int height, @NotNull Priority priority) {
-        this(Slot.fromXY(x, y), length, height, priority);
-    }
-
 
     /**
      * Creates a new outline pane
      *
-     * @param slot the slot of the pane
      * @param length the length of the pane
      * @param height the height of the pane
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public OutlinePane(@NotNull Slot slot, int length, int height) {
-        this(slot, length, height, Priority.NORMAL);
-    }
-
-    public OutlinePane(int x, int y, int length, int height) {
-        this(x, y, length, height, Priority.NORMAL);
-    }
-
     public OutlinePane(int length, int height) {
-        this(0, 0, length, height);
+        this(length, height, Priority.NORMAL);
     }
 
+    @NotNull
     @Override
-    public void display(@NotNull InventoryComponent inventoryComponent, int paneOffsetX, int paneOffsetY, int maxLength,
-                        int maxHeight) {
-        int length = Math.min(this.length, maxLength);
-        int height = Math.min(this.height, maxHeight);
+    public GuiItemContainer display() {
+        GuiItemContainer container = new GuiItemContainer(getLength(), getHeight());
 
         int itemIndex = 0;
         int gapCount = 0;
@@ -133,9 +118,9 @@ public class OutlinePane extends Pane implements Flippable, Orientable, Rotatabl
         int size;
 
         if (getOrientation() == Orientation.HORIZONTAL) {
-            size = height;
+            size = getHeight();
         } else if (getOrientation() == Orientation.VERTICAL) {
-            size = length;
+            size = getHeight();
         } else {
             throw new IllegalStateException("Unknown orientation '" + getOrientation() + "'");
         }
@@ -216,28 +201,24 @@ public class OutlinePane extends Pane implements Flippable, Orientable, Rotatabl
                     }
 
                     if (flipHorizontally) {
-                        x = length - x - 1;
+                        x = getLength() - x - 1;
                     }
 
                     if (flipVertically) {
-                        y = height - y - 1;
+                        y = getHeight() - y - 1;
                     }
 
                     Map.Entry<Integer, Integer> coordinates = GeometryUtil.processClockwiseRotation(x, y,
-                            length, height, rotation);
+                            getLength(), getHeight(), rotation);
 
                     x = coordinates.getKey();
                     y = coordinates.getValue();
 
-                    if (x >= 0 && x < length && y >= 0 && y < height) {
-                        Slot slot = getSlot();
-
-                        int finalRow = slot.getY(maxLength) + y + paneOffsetY;
-                        int finalColumn = slot.getX(maxLength) + x + paneOffsetX;
-
+                    if (x >= 0 && x < getLength() && y >= 0 && y < getHeight()) {
                         GuiItem item = items[index];
+
                         if (item.isVisible()) {
-                            inventoryComponent.setItem(item, finalColumn, finalRow);
+                            container.setItem(item, x, y);
                         }
                     }
                 }
@@ -245,29 +226,18 @@ public class OutlinePane extends Pane implements Flippable, Orientable, Rotatabl
                 index++;
             }
         }
+
+        return container;
     }
 
     @Override
-    public boolean click(@NotNull Gui gui, @NotNull InventoryComponent inventoryComponent,
-                         @NotNull InventoryClickEvent event, int slot, int paneOffsetX, int paneOffsetY, int maxLength,
-                         int maxHeight) {
-        int length = Math.min(this.length, maxLength);
-        int height = Math.min(this.height, maxHeight);
-
-        Slot paneSlot = getSlot();
-
-        int xPosition = paneSlot.getX(maxLength);
-        int yPosition = paneSlot.getY(maxLength);
-
-        int totalLength = inventoryComponent.getLength();
-
-        int adjustedSlot = slot - (xPosition + paneOffsetX) - totalLength * (yPosition + paneOffsetY);
-
-        int x = adjustedSlot % totalLength;
-        int y = adjustedSlot / totalLength;
+    public boolean click(@NotNull Gui gui, @NotNull GuiComponent guiComponent, @NotNull InventoryClickEvent event,
+                         @NotNull Slot slot) {
+        int x = slot.getX(getLength());
+        int y = slot.getY(getLength());
 
         //this isn't our item
-        if (x < 0 || x >= length || y < 0 || y >= height) {
+        if (x < 0 || x >= getLength() || y < 0 || y >= getHeight()) {
             return false;
         }
 
@@ -294,7 +264,7 @@ public class OutlinePane extends Pane implements Flippable, Orientable, Rotatabl
     @Contract(pure = true)
     @Override
     public OutlinePane copy() {
-        OutlinePane outlinePane = new OutlinePane(getSlot(), length, height, getPriority());
+        OutlinePane outlinePane = new OutlinePane(getLength(), getHeight(), getPriority());
 
         for (GuiItem item : items) {
             outlinePane.addItem(item.copy());
@@ -535,63 +505,73 @@ public class OutlinePane extends Pane implements Flippable, Orientable, Rotatabl
      */
     @NotNull
     public static OutlinePane load(@NotNull Object instance, @NotNull Element element, @NotNull Plugin plugin) {
-        try {
-            OutlinePane outlinePane = new OutlinePane(
-                Integer.parseInt(element.getAttribute("length")),
-                Integer.parseInt(element.getAttribute("height"))
-            );
-
-            if (element.hasAttribute("gap"))
-                outlinePane.setGap(Integer.parseInt(element.getAttribute("gap")));
-
-            if (element.hasAttribute("repeat"))
-                outlinePane.setRepeat(Boolean.parseBoolean(element.getAttribute("repeat")));
-
-            if (element.hasAttribute("alignment")) {
-                outlinePane.align(Alignment.valueOf(element.getAttribute("alignment").toUpperCase()));
-            }
-
-            Pane.load(outlinePane, instance, element);
-            Flippable.load(outlinePane, element);
-            Orientable.load(outlinePane, element);
-            Rotatable.load(outlinePane, element);
-
-            if (element.hasAttribute("populate"))
-                return outlinePane;
-
-            NodeList childNodes = element.getChildNodes();
-
-            for (int i = 0; i < childNodes.getLength(); i++) {
-                Node item = childNodes.item(i);
-
-                if (item.getNodeType() != Node.ELEMENT_NODE)
-                    continue;
-
-                if (item.getNodeName().equals("empty"))
-                    outlinePane.addItem(new GuiItem(new ItemStack(Material.AIR), plugin));
-                else
-                    outlinePane.addItem(Pane.loadItem(instance, (Element) item, plugin));
-            }
-
-            return outlinePane;
-        } catch (NumberFormatException exception) {
-            throw new XMLLoadException(exception);
+        if (!element.hasAttribute("length")) {
+            throw new XMLLoadException("Outline pane XML tag does not have the mandatory length attribute");
         }
-    }
 
-    /**
-     * Loads an outline pane from a given element
-     *
-     * @param instance the instance class
-     * @param element the element
-     * @return the outline pane
-     * @deprecated this method is no longer used internally and has been superseded by
-     *             {@link #load(Object, Element, Plugin)}
-     */
-    @NotNull
-    @Deprecated
-    public static OutlinePane load(@NotNull Object instance, @NotNull Element element) {
-        return load(instance, element, JavaPlugin.getProvidingPlugin(OutlinePane.class));
+        if (!element.hasAttribute("height")) {
+            throw new XMLLoadException("Outline pane XML tag does not have the mandatory height attribute");
+        }
+
+        int length;
+        int height;
+
+        try {
+            length = Integer.parseInt(element.getAttribute("length"));
+        } catch (NumberFormatException exception) {
+            throw new XMLLoadException("Length attribute is not an integer", exception);
+        }
+
+        try {
+            height = Integer.parseInt(element.getAttribute("height"));
+        } catch (NumberFormatException exception) {
+            throw new XMLLoadException("Height attribute is not an integer", exception);
+        }
+
+        OutlinePane outlinePane = new OutlinePane(length, height);
+
+        if (element.hasAttribute("gap")) {
+            try {
+                outlinePane.setGap(Integer.parseInt(element.getAttribute("gap")));
+            } catch (NumberFormatException exception) {
+                throw new XMLLoadException("Gap attribute is not an integer", exception);
+            }
+        }
+
+        if (element.hasAttribute("repeat"))
+            outlinePane.setRepeat(Boolean.parseBoolean(element.getAttribute("repeat")));
+
+        if (element.hasAttribute("alignment")) {
+            try {
+                outlinePane.align(Alignment.valueOf(element.getAttribute("alignment").toUpperCase()));
+            } catch (IllegalArgumentException exception) {
+                throw new XMLLoadException("Alignment attribute is not a proper value", exception);
+            }
+        }
+
+        Pane.load(outlinePane, instance, element);
+        Flippable.load(outlinePane, element);
+        Orientable.load(outlinePane, element);
+        Rotatable.load(outlinePane, element);
+
+        if (element.hasAttribute("populate"))
+            return outlinePane;
+
+        NodeList childNodes = element.getChildNodes();
+
+        for (int i = 0; i < childNodes.getLength(); i++) {
+            Node item = childNodes.item(i);
+
+            if (item.getNodeType() != Node.ELEMENT_NODE)
+                continue;
+
+            if (item.getNodeName().equals("empty"))
+                outlinePane.addItem(new GuiItem(new ItemStack(Material.AIR), plugin));
+            else
+                outlinePane.addItem(GuiItem.loadItem(instance, (Element) item, plugin));
+        }
+
+        return outlinePane;
     }
 
     /**

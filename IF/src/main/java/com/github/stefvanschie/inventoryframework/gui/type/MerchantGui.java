@@ -5,22 +5,22 @@ import com.github.stefvanschie.inventoryframework.abstraction.MerchantInventory;
 import com.github.stefvanschie.inventoryframework.adventuresupport.StringHolder;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.util.Gui;
+import com.github.stefvanschie.inventoryframework.gui.type.util.InventoryBased;
 import com.github.stefvanschie.inventoryframework.gui.type.util.NamedGui;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
-import com.github.stefvanschie.inventoryframework.util.InventoryViewUtil;
 import com.github.stefvanschie.inventoryframework.util.XMLUtil;
 import com.github.stefvanschie.inventoryframework.util.version.Version;
 import com.github.stefvanschie.inventoryframework.util.version.VersionMatcher;
+import org.bukkit.Material;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.TradeSelectEvent;
 import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.Merchant;
 import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -39,6 +39,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -48,7 +50,7 @@ import java.util.function.Consumer;
  *
  * @since 0.10.0
  */
-public class MerchantGui extends NamedGui {
+public class MerchantGui extends NamedGui implements InventoryBased {
 
     /**
      * The consumer that will be called once a players selects a trade listed
@@ -57,35 +59,23 @@ public class MerchantGui extends NamedGui {
     private Consumer<? super TradeSelectEvent> onTradeSelect;
 
     /**
-     * Represents the inventory component for the input
+     * Represents the gui component for the input
      */
     @NotNull
-    private InventoryComponent inputComponent = new InventoryComponent(2, 1);
+    private GuiComponent inputComponent = new GuiComponent(2, 1);
 
     /**
-     * Represents the inventory component for the player inventory
+     * Represents the gui component for the player inventory
      */
     @NotNull
-    private InventoryComponent playerInventoryComponent = new InventoryComponent(9, 4);
-
-    /**
-     * The merchant holding the trades and inventory
-     */
-    @NotNull
-    private Merchant merchant;
-
-    /**
-     * The human entities viewing this gui
-     */
-    @NotNull
-    private final List<HumanEntity> viewers = new ArrayList<>();
+    private GuiComponent playerGuiComponent = new GuiComponent(9, 4);
 
     /**
      * The trades of this merchant with their price differences. The differences are the difference between the new
      * price and the original price.
      */
     @NotNull
-    private final List<Map.Entry<MerchantRecipe, Integer>> trades = new ArrayList<>();
+    private final List<Map.Entry<? extends MerchantRecipe, ? extends Integer>> trades = new ArrayList<>();
 
     /**
      * The experience of this merchant. Values below zero indicate that the experience should be hidden.
@@ -145,8 +135,6 @@ public class MerchantGui extends NamedGui {
      */
     public MerchantGui(@NotNull TextHolder title, @NotNull Plugin plugin) {
         super(title, plugin);
-
-        this.merchant = getTitleHolder().asMerchantTitle();
     }
 
     /**
@@ -181,59 +169,97 @@ public class MerchantGui extends NamedGui {
     }
 
     @Override
+    public void update() {
+        super.updating = true;
+
+        if (isDirty()) {
+            Inventory oldInventory = this.inventory;
+            this.inventory = createInventory();
+
+            if (oldInventory != null) {
+                for (HumanEntity viewer : new ArrayList<>(oldInventory.getViewers())) {
+                    viewer.openInventory(this.inventory);
+                }
+            }
+
+            markChanges();
+        }
+
+        getInventory().clear();
+
+        getInputComponent().display(getInventory(), 0);
+        getPlayerGuiComponent().display();
+
+        for (HumanEntity viewer : getViewers()) {
+            ItemStack cursor = viewer.getItemOnCursor();
+            viewer.setItemOnCursor(new ItemStack(Material.AIR));
+
+            populateBottomInventory(viewer);
+
+            if ((this.experience >= 0 || this.level > 0 || !this.trades.isEmpty()) && viewer instanceof Player) {
+                this.merchantInventory.sendMerchantOffers((Player) viewer, this.trades, this.level, this.experience);
+            }
+
+            viewer.setItemOnCursor(cursor);
+        }
+
+        if (!super.updating)
+            throw new AssertionError("Gui#isUpdating became false before Gui#update finished");
+
+        super.updating = false;
+    }
+
+    @NotNull
+    @Contract(pure = true)
+    @Override
+    public Iterable<? extends GuiItem> getItems() {
+        Collection<@NotNull GuiItem> items = new HashSet<>();
+
+        for (Pane pane : getInputComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getPlayerGuiComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        return items;
+    }
+
+    @Override
     public void show(@NotNull HumanEntity humanEntity) {
         if (!(humanEntity instanceof Player)) {
             throw new IllegalArgumentException("Merchants can only be opened by players");
         }
 
         if (isDirty()) {
-            this.merchant = getTitleHolder().asMerchantTitle();
-            markChanges();
+            update();
         }
 
-        InventoryView view = humanEntity.openMerchant(merchant, true);
+        populateBottomInventory(humanEntity);
 
-        if (view == null) {
-            throw new IllegalStateException("Merchant could not be opened");
+        humanEntity.openInventory(getInventory());
+
+        if (this.experience >= 0 || this.level > 0 || !this.trades.isEmpty()) {
+            this.merchantInventory.sendMerchantOffers((Player) humanEntity, this.trades, this.level, this.experience);
         }
+    }
 
-        Inventory inventory = InventoryViewUtil.getInstance().getTopInventory(view);
-
-        addInventory(inventory, this);
-
-        inventory.clear();
-
-        getInputComponent().display(inventory, 0);
-        getPlayerInventoryComponent().display();
-
-        if (getPlayerInventoryComponent().hasItem()) {
+    /**
+     * Populates the inventory of the {@link HumanEntity} if needed.
+     *
+     * @param humanEntity the human entity
+     * @since 0.11.4
+     */
+    private void populateBottomInventory(@NotNull HumanEntity humanEntity) {
+        if (getPlayerGuiComponent().hasItem()) {
             HumanEntityCache humanEntityCache = getHumanEntityCache();
 
             if (!humanEntityCache.contains(humanEntity)) {
                 humanEntityCache.storeAndClear(humanEntity);
             }
 
-            getPlayerInventoryComponent().placeItems(humanEntity.getInventory(), 0);
-        }
-
-        this.viewers.add(humanEntity);
-
-        Player player = (Player) humanEntity;
-
-        if (this.experience >= 0 || this.level > 0) {
-            this.merchantInventory.sendMerchantOffers(player, this.trades, this.level, this.experience);
-
-            return;
-        }
-
-        boolean discount = false;
-
-        for (Map.Entry<MerchantRecipe, Integer> trade : this.trades) {
-            if (trade.getValue() != 0) {
-                this.merchantInventory.sendMerchantOffers(player, this.trades, this.level, this.experience);
-
-                break;
-            }
+            getPlayerGuiComponent().placeItems(humanEntity.getInventory(), 0);
         }
     }
 
@@ -243,12 +269,12 @@ public class MerchantGui extends NamedGui {
         MerchantGui gui = new MerchantGui(getTitleHolder(), super.plugin);
 
         gui.inputComponent = inputComponent.copy();
-        gui.playerInventoryComponent = playerInventoryComponent.copy();
+        gui.playerGuiComponent = this.playerGuiComponent.copy();
 
         gui.experience = experience;
         gui.level = level;
 
-        for (Map.Entry<MerchantRecipe, Integer> trade : trades) {
+        for (Map.Entry<? extends MerchantRecipe, ? extends Integer> trade : trades) {
             MerchantRecipe originalRecipe = trade.getKey();
 
             ItemStack result = originalRecipe.getResult().clone();
@@ -286,8 +312,29 @@ public class MerchantGui extends NamedGui {
         if (rawSlot >= 0 && rawSlot <= 1) {
             getInputComponent().click(this, event, rawSlot);
         } else if (rawSlot != 2) {
-            getPlayerInventoryComponent().click(this, event, rawSlot - 3);
+            getPlayerGuiComponent().click(this, event, rawSlot - 3);
         }
+    }
+
+    @NotNull
+    @Override
+    public Inventory getInventory() {
+        if (this.inventory == null) {
+            this.inventory = createInventory();
+        }
+
+        return inventory;
+    }
+
+    @NotNull
+    @Contract(pure = true)
+    @Override
+    public Inventory createInventory() {
+        Inventory inventory = this.merchantInventory.createInventory(getTitleHolder());
+
+        addInventory(inventory, this);
+
+        return inventory;
     }
 
     /**
@@ -300,12 +347,6 @@ public class MerchantGui extends NamedGui {
      */
     public void addTrade(@NotNull MerchantRecipe recipe, int discount) {
         this.trades.add(new AbstractMap.SimpleImmutableEntry<>(recipe, -discount));
-
-        List<MerchantRecipe> recipes = new ArrayList<>(this.merchant.getRecipes());
-
-        recipes.add(recipe);
-
-        this.merchant.setRecipes(recipes);
     }
 
     /**
@@ -356,56 +397,46 @@ public class MerchantGui extends NamedGui {
         addTrade(recipe, 0);
     }
 
-    /**
-     * Handles a human entity closing this gui.
-     *
-     * @param humanEntity the human entity who's closing this gui
-     * @since 0.10.0
-     */
-    public void handleClose(@NotNull HumanEntity humanEntity) {
-        this.viewers.remove(humanEntity);
-    }
-
     @Override
     public boolean isPlayerInventoryUsed() {
-        return getPlayerInventoryComponent().hasItem();
+        return getPlayerGuiComponent().hasItem();
     }
 
     @Contract(pure = true)
     @Override
     public int getViewerCount() {
-        return this.viewers.size();
+        return getInventory().getViewers().size();
     }
 
     @NotNull
     @Contract(pure = true)
     @Override
     public List<HumanEntity> getViewers() {
-        return new ArrayList<>(this.viewers);
+        return new ArrayList<>(getInventory().getViewers());
     }
 
     /**
-     * Gets the inventory component representing the input
+     * Gets the gui component representing the input
      *
      * @return the input component
      * @since 0.10.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getInputComponent() {
+    public GuiComponent getInputComponent() {
         return inputComponent;
     }
 
     /**
-     * Gets the inventory component representing the player inventory
+     * Gets the gui component representing the player inventory
      *
-     * @return the player inventory component
+     * @return the player gui component
      * @since 0.10.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getPlayerInventoryComponent() {
-        return playerInventoryComponent;
+    public GuiComponent getPlayerGuiComponent() {
+        return this.playerGuiComponent;
     }
 
     /**
@@ -475,14 +506,14 @@ public class MerchantGui extends NamedGui {
                     throw new XMLLoadException("Component tag does not have a name specified");
                 }
 
-                InventoryComponent component;
+                GuiComponent component;
 
                 switch (nestedElement.getAttribute("name")) {
                     case "input":
                         component = merchantGui.getInputComponent();
                         break;
                     case "player-inventory":
-                        component = merchantGui.getPlayerInventoryComponent();
+                        component = merchantGui.getPlayerGuiComponent();
                         break;
                     default:
                         throw new XMLLoadException("Unknown component name");
@@ -518,7 +549,7 @@ public class MerchantGui extends NamedGui {
                                 continue;
                             }
 
-                            ingredients.add(Pane.loadItem(instance, (Element) ingredientNode).getItem());
+                            ingredients.add(GuiItem.loadItem(instance, (Element) ingredientNode).getItem());
                         }
                     } else if (tradeElement.getTagName().equalsIgnoreCase("result")) {
                         NodeList resultNodes = tradeElement.getChildNodes();
@@ -534,7 +565,7 @@ public class MerchantGui extends NamedGui {
                                 throw new XMLLoadException("Multiple results specified for the same trade");
                             }
 
-                            result = Pane.loadItem(instance, (Element) resultNode).getItem();
+                            result = GuiItem.loadItem(instance, (Element) resultNode).getItem();
                         }
                     } else {
                         throw new XMLLoadException("Trade element is neither an ingredient nor a result");
