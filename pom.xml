@@ -80,37 +80,6 @@
 
     <profiles>
         <profile>
-            <id>deploy</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.2.7</version>
-                        <executions>
-                            <execution>
-                                <id>sign-artifacts</id>
-                                <phase>verify</phase>
-                                <goals>
-                                    <goal>sign</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-            <distributionManagement>
-                <snapshotRepository>
-                    <id>ossrh</id>
-                    <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-                </snapshotRepository>
-                <repository>
-                    <id>ossrh</id>
-                    <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-                </repository>
-            </distributionManagement>
-        </profile>
-        <profile>
             <id>github-deploy</id>
             <activation>
                 <property>
@@ -120,8 +89,8 @@
             </activation>
             <distributionManagement>
                 <repository>
-                    <id>github</id>
-                    <url>https://maven.pkg.github.com/${env.GITHUB_REPOSITORY}</url>
+                    <id>novaverse-snapshots</id>
+                    <url>https://repo.novaverse.it/repository/maven-snapshots/</url>
                 </repository>
             </distributionManagement>
         </profile>
