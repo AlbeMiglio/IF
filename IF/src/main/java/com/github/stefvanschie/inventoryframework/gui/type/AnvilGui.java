@@ -16,6 +16,7 @@ import org.bukkit.entity.HumanEntity;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Contract;
@@ -209,8 +210,30 @@ public class AnvilGui extends NamedGui implements InventoryBased {
 
         populateBottomInventory(humanEntity);
 
+        // NOVAVERSE: hook for pre-populating rename text field
+        beforeOpen();
+
         humanEntity.openInventory(getInventory());
     }
+
+    // NOVAVERSE-START: setText support — sets slot 0 display name so client pre-fills rename field
+    protected void beforeOpen() {
+        String initialText = anvilInventory.getRenameText();
+        if (initialText.isEmpty()) return;
+
+        ItemStack slot0 = getInventory().getItem(0);
+        ItemStack textItem = (slot0 == null || slot0.getType() == Material.AIR)
+            ? new ItemStack(Material.PAPER)
+            : slot0.clone();
+
+        ItemMeta meta = textItem.getItemMeta();
+        if (meta != null) {
+            meta.setDisplayName(initialText);
+            textItem.setItemMeta(meta);
+        }
+        getInventory().setItem(0, textItem);
+    }
+    // NOVAVERSE-END
 
     /**
      * Populates the inventory of the {@link HumanEntity} if needed.
