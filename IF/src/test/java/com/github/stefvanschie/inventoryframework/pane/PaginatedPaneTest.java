@@ -1,8 +1,13 @@
 package com.github.stefvanschie.inventoryframework.pane;
 
+import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -10,12 +15,12 @@ public class PaginatedPaneTest {
 
     @Test
     void testAddPageEmpty() {
-        PaginatedPane paginatedPane = new PaginatedPane(0, 0, 1, 1);
+        PaginatedPane paginatedPane = new PaginatedPane(1, 1);
 
-        StaticPane staticPane = new StaticPane(0, 0, 1, 1);
+        StaticPane staticPane = new StaticPane(1, 1);
 
         assertDoesNotThrow(() -> {
-            paginatedPane.addPage(staticPane);
+            paginatedPane.addPage(Slot.fromXY(0, 0), staticPane);
 
             Collection<Pane> panes = paginatedPane.getPanes(0);
 
@@ -26,15 +31,15 @@ public class PaginatedPaneTest {
 
     @Test
     void testAddPageNotEmpty() {
-        PaginatedPane paginatedPane = new PaginatedPane(0, 0, 1, 1);
+        PaginatedPane paginatedPane = new PaginatedPane(1, 1);
 
-        StaticPane staticPane1 = new StaticPane(0, 0, 1, 1);
-        StaticPane staticPane2 = new StaticPane(0, 0, 1, 1);
+        StaticPane staticPane1 = new StaticPane(1, 1);
+        StaticPane staticPane2 = new StaticPane(1, 1);
 
-        paginatedPane.addPane(0, staticPane1);
+        paginatedPane.addPane(0, Slot.fromXY(0, 0), staticPane1);
 
         assertDoesNotThrow(() -> {
-            paginatedPane.addPage(staticPane2);
+            paginatedPane.addPage(Slot.fromXY(0, 0), staticPane2);
 
             Collection<Pane> panes = paginatedPane.getPanes(1);
 
@@ -44,27 +49,103 @@ public class PaginatedPaneTest {
     }
 
     @Test
-    void testAddPageException() {
-        PaginatedPane paginatedPane = new PaginatedPane(0, 0, 1, 1);
+    void testAddPaneNegative() {
+        PaginatedPane paginatedPane = new PaginatedPane( 1, 1);
 
-        StaticPane staticPane1 = new StaticPane(0, 0, 1, 1);
-        StaticPane staticPane2 = new StaticPane(0, 0, 1, 1);
+        StaticPane staticPane = new StaticPane(1, 1);
 
-        paginatedPane.addPane(Integer.MAX_VALUE, staticPane1);
+        assertThrows(IllegalArgumentException.class, () -> paginatedPane.addPane(-1, Slot.fromXY(0, 0), staticPane));
+    }
 
-        assertThrows(ArithmeticException.class, () -> paginatedPane.addPage(staticPane2));
+    @Test
+    void testAddPaneExisting() {
+        PaginatedPane paginatedPane = new PaginatedPane(1, 1);
+
+        StaticPane staticPane1 = new StaticPane(1, 1);
+        StaticPane staticPane2 = new StaticPane(1, 1);
+
+        Set<? super Pane> elements = new HashSet<>();
+
+        elements.add(staticPane1);
+        elements.add(staticPane2);
+
+        paginatedPane.addPane(0, Slot.fromXY(0, 0), staticPane1);
+
+        assertDoesNotThrow(() -> {
+            paginatedPane.addPane(0, Slot.fromXY(0, 0), staticPane2);
+
+            Collection<Pane> panes = paginatedPane.getPanes(0);
+
+            assertEquals(elements.size(), panes.size());
+            assertTrue(elements.containsAll(panes));
+        });
+    }
+
+    @Test
+    void testAddPaneAfter() {
+        PaginatedPane paginatedPane = new PaginatedPane(1, 1);
+
+        StaticPane staticPane1 = new StaticPane(1, 1);
+        StaticPane staticPane2 = new StaticPane(1, 1);
+
+        paginatedPane.addPane(0, Slot.fromXY(0, 0), staticPane1);
+
+        assertDoesNotThrow(() -> {
+            paginatedPane.addPane(1, Slot.fromXY(0, 0), staticPane2);
+
+            Collection<Pane> panes0 = paginatedPane.getPanes(0);
+
+            assertEquals(1, panes0.size());
+            assertEquals(staticPane1, panes0.iterator().next());
+
+            Collection<Pane> panes1 = paginatedPane.getPanes(1);
+
+            assertEquals(1, panes1.size());
+            assertEquals(staticPane2, panes1.iterator().next());
+        });
+    }
+
+    @Test
+    void testAddPaneBeyond() {
+        PaginatedPane paginatedPane = new PaginatedPane(1, 1);
+
+        StaticPane staticPane1 = new StaticPane(1, 1);
+        StaticPane staticPane2 = new StaticPane(1, 1);
+
+        paginatedPane.addPane(0, Slot.fromXY(0, 0), staticPane1);
+
+        assertThrows(IllegalArgumentException.class, () -> paginatedPane.addPane(2, Slot.fromXY(0, 0), staticPane2));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {-1, 0})
+    void testSetPageOutside(int index) {
+        PaginatedPane paginatedPane = new PaginatedPane(1, 1);
+
+        assertThrows(ArrayIndexOutOfBoundsException.class, () -> paginatedPane.setPage(index));
+    }
+
+    @Test
+    void testSetPage() {
+        PaginatedPane paginatedPane = new PaginatedPane(1, 1);
+
+        StaticPane staticPane1 = new StaticPane(1, 1);
+
+        paginatedPane.addPage(Slot.fromXY(0, 0), staticPane1);
+
+        assertDoesNotThrow(() -> paginatedPane.setPage(0));
     }
 
     @Test
     void testCopy() {
-        PaginatedPane original = new PaginatedPane(5, 5, 4, 1, Pane.Priority.NORMAL);
+        PaginatedPane original = new PaginatedPane(4, 1, Pane.Priority.NORMAL);
         original.setVisible(false);
 
-        original.addPane(0, new OutlinePane(1, 1));
-        original.addPane(1, new OutlinePane(1, 1));
-        original.addPane(2, new PaginatedPane(1, 1));
-        original.addPane(3, new PaginatedPane(1, 1));
-        original.addPane(4, new OutlinePane(1, 1));
+        original.addPane(0, Slot.fromXY(0, 0), new OutlinePane(1, 1));
+        original.addPane(1, Slot.fromXY(0, 0), new OutlinePane(1, 1));
+        original.addPane(2, Slot.fromXY(0, 0), new PaginatedPane(1, 1));
+        original.addPane(3, Slot.fromXY(0, 0), new PaginatedPane(1, 1));
+        original.addPane(4, Slot.fromXY(0, 0), new OutlinePane(1, 1));
 
         original.setPage(4);
 
@@ -72,8 +153,6 @@ public class PaginatedPaneTest {
 
         assertNotSame(original, copy);
 
-        assertEquals(original.getX(), copy.getX());
-        assertEquals(original.getY(), copy.getY());
         assertEquals(original.getLength(), copy.getLength());
         assertEquals(original.getHeight(), copy.getHeight());
         assertEquals(original.getPriority(), copy.getPriority());
@@ -85,12 +164,12 @@ public class PaginatedPaneTest {
 
     @Test
     void testDeletePageExists() {
-        PaginatedPane pane = new PaginatedPane(0, 0, 1, 1);
+        PaginatedPane pane = new PaginatedPane(1, 1);
 
-        StaticPane staticPane = new StaticPane(0, 0, 1, 1);
+        StaticPane staticPane = new StaticPane(1, 1);
 
-        pane.addPane(0, new StaticPane(0, 0, 1, 1));
-        pane.addPane(1, staticPane);
+        pane.addPane(0, Slot.fromXY(0, 0), new StaticPane(1, 1));
+        pane.addPane(1, Slot.fromXY(0, 0), staticPane);
 
         pane.deletePage(0);
 
@@ -99,20 +178,11 @@ public class PaginatedPaneTest {
         assertSame(staticPane, pane.getPanes(0).toArray(new Pane[0])[0]);
     }
 
-    @Test
-    void testDeletePageNotExists() {
-        PaginatedPane pane = new PaginatedPane(0, 0, 1, 1);
+    @ParameterizedTest
+    @ValueSource(ints = {-1, 0})
+    void testDeletePageNotExists(int index) {
+        PaginatedPane pane = new PaginatedPane(1, 1);
 
-        StaticPane staticPane1 = new StaticPane(0, 0, 1, 1);
-        StaticPane staticPane2 = new StaticPane(0, 0, 1, 1);
-
-        pane.addPane(0, staticPane1);
-        pane.addPane(1, staticPane2);
-
-        pane.deletePage(2);
-
-        assertEquals(2, pane.getPages());
-        assertSame(staticPane1, pane.getPanes(0).toArray(new Pane[0])[0]);
-        assertSame(staticPane2, pane.getPanes(1).toArray(new Pane[0])[0]);
+        assertDoesNotThrow(() -> pane.deletePage(index));
     }
 }

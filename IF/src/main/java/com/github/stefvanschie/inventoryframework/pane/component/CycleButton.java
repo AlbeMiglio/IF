@@ -1,14 +1,14 @@
 package com.github.stefvanschie.inventoryframework.pane.component;
 
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
 import com.github.stefvanschie.inventoryframework.gui.type.util.Gui;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
 import com.github.stefvanschie.inventoryframework.pane.Pane;
+import com.github.stefvanschie.inventoryframework.pane.util.GuiItemContainer;
 import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.w3c.dom.Element;
@@ -38,61 +38,34 @@ public class CycleButton extends Pane {
     /**
      * Creates a new cycle button
      *
-     * @param slot the slot of the button
      * @param length the length of the button
      * @param height the height of the button
      * @param priority the priority of the button
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public CycleButton(@NotNull Slot slot, int length, int height, @NotNull Priority priority) {
-        super(slot, length, height, priority);
-    }
-
-    public CycleButton(int x, int y, int length, int height, @NotNull Priority priority) {
-        super(x, y, length, height, priority);
+    public CycleButton(int length, int height, @NotNull Priority priority) {
+        super(length, height, priority);
     }
 
     /**
      * Creates a new cycle button
      *
-     * @param slot the slot of the button
      * @param length the length of the button
      * @param height the height of the button
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public CycleButton(@NotNull Slot slot, int length, int height) {
-        super(slot, length, height);
-    }
-
-    public CycleButton(int x, int y, int length, int height) {
-        super(x, y, length, height);
-    }
-
     public CycleButton(int length, int height) {
         super(length, height);
     }
 
     @Override
-    public boolean click(@NotNull Gui gui, @NotNull InventoryComponent inventoryComponent,
-                         @NotNull InventoryClickEvent event, int slot, int paneOffsetX, int paneOffsetY, int maxLength,
-                         int maxHeight) {
-        int length = Math.min(this.length, maxLength);
-        int height = Math.min(this.height, maxHeight);
-
-        Slot paneSlot = getSlot();
-
-        int xPosition = paneSlot.getX(maxLength);
-        int yPosition = paneSlot.getY(maxLength);
-
-        int totalLength = inventoryComponent.getLength();
-
-        int adjustedSlot = slot - (xPosition + paneOffsetX) - totalLength * (yPosition + paneOffsetY);
-
-        int x = adjustedSlot % totalLength;
-        int y = adjustedSlot / totalLength;
+    public boolean click(@NotNull Gui gui, @NotNull GuiComponent guiComponent, @NotNull InventoryClickEvent event,
+                         @NotNull Slot slot) {
+        int x = slot.getX(getLength());
+        int y = slot.getY(getLength());
 
         //this isn't our item
-        if (x < 0 || x >= length || y < 0 || y >= height) {
+        if (x < 0 || x >= getLength() || y < 0 || y >= getHeight()) {
             return false;
         }
 
@@ -107,34 +80,28 @@ public class CycleButton extends Pane {
         callOnClick(event);
 
         //use the previous position, since that will have the pane we clicked on
-        Pane pane = panes.get(previousPosition);
-        pane.click(gui, inventoryComponent, event, slot, paneOffsetX + x, paneOffsetY + y,
-            length, height);
+        panes.get(previousPosition).click(gui, guiComponent, event, slot);
 
         gui.update();
 
         return true;
     }
 
+    @NotNull
     @Override
-    public void display(@NotNull InventoryComponent inventoryComponent, int paneOffsetX, int paneOffsetY, int maxLength,
-                        int maxHeight) {
-        Slot slot = getSlot();
+    public GuiItemContainer display() {
+        GuiItemContainer container = new GuiItemContainer(getLength(), getHeight());
 
-        int newX = paneOffsetX + slot.getX(maxLength);
-        int newY = paneOffsetY + slot.getY(maxLength);
+        container.apply(this.panes.get(this.position).display(), 0, 0);
 
-        int newMaxLength = Math.min(maxLength, length);
-        int newMaxHeight = Math.min(maxHeight, height);
-
-        panes.get(position).display(inventoryComponent, newX, newY, newMaxLength, newMaxHeight);
+        return container;
     }
 
     @NotNull
     @Contract(pure = true)
     @Override
     public CycleButton copy() {
-        CycleButton cycleButton = new CycleButton(getSlot(), length, height, getPriority());
+        CycleButton cycleButton = new CycleButton(getLength(), getHeight(), getPriority());
 
         for (Pane pane : panes) {
             cycleButton.addPane(pane);
@@ -208,14 +175,27 @@ public class CycleButton extends Pane {
      */
     @NotNull
     public static CycleButton load(@NotNull Object instance, @NotNull Element element, @NotNull Plugin plugin) {
+        if (!element.hasAttribute("length")) {
+            throw new XMLLoadException("Cycle button XML tag does not have the mandatory length attribute");
+        }
+
+        if (!element.hasAttribute("height")) {
+            throw new XMLLoadException("Cycle button XML tag does not have the mandatory height attribute");
+        }
+
         int length;
         int height;
 
         try {
             length = Integer.parseInt(element.getAttribute("length"));
+        } catch (NumberFormatException exception) {
+            throw new XMLLoadException("Length attribute is not an integer", exception);
+        }
+
+        try {
             height = Integer.parseInt(element.getAttribute("height"));
         } catch (NumberFormatException exception) {
-            throw new XMLLoadException(exception);
+            throw new XMLLoadException("Height attribute is not an integer", exception);
         }
 
         CycleButton cycleButton = new CycleButton(length, height);
@@ -239,21 +219,5 @@ public class CycleButton extends Pane {
         }
 
         return cycleButton;
-    }
-
-    /**
-     * Loads a cycle button from a given element
-     *
-     * @param instance the instance class
-     * @param element the element
-     * @return the cycle button
-     * @since 0.5.0
-     * @deprecated this method is no longer used internally and has been superseded by
-     *             {@link #load(Object, Element, Plugin)}
-     */
-    @NotNull
-    @Deprecated
-    public static CycleButton load(@NotNull Object instance, @NotNull Element element) {
-        return load(instance, element, JavaPlugin.getProvidingPlugin(CycleButton.class));
     }
 }

@@ -1,13 +1,13 @@
 package com.github.stefvanschie.inventoryframework.pane;
 
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
 import com.github.stefvanschie.inventoryframework.gui.type.util.Gui;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
+import com.github.stefvanschie.inventoryframework.pane.util.GuiItemContainer;
 import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.w3c.dom.Element;
@@ -41,49 +41,39 @@ public class MasonryPane extends Pane implements Orientable {
     private Orientation orientation = Orientation.HORIZONTAL;
 
     /**
+     * The cached positions from the last display.
+     */
+    private int[][] cachedPositions;
+
+    /**
      * Creates a new masonry pane
      *
-     * @param slot the slot of the pane
      * @param length the length of the pane
      * @param height the height of the pane
      * @param priority the priority of the pane
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public MasonryPane(@NotNull Slot slot, int length, int height, @NotNull Priority priority) {
-        super(slot, length, height, priority);
-    }
-
-    public MasonryPane(int x, int y, int length, int height, @NotNull Priority priority) {
-        super(x, y, length, height, priority);
+    public MasonryPane(int length, int height, @NotNull Priority priority) {
+        super(length, height, priority);
     }
 
     /**
      * Creates a new masonry pane
      *
-     * @param slot the slot of the pane
      * @param length the length of the pane
      * @param height the height of the pane
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public MasonryPane(@NotNull Slot slot, int length, int height) {
-        super(slot, length, height);
-    }
-
-    public MasonryPane(int x, int y, int length, int height) {
-        super(x, y, length, height);
-    }
-
     public MasonryPane(int length, int height) {
         super(length, height);
     }
 
+    @NotNull
     @Override
-    public void display(@NotNull InventoryComponent inventoryComponent, int paneOffsetX, int paneOffsetY, int maxLength,
-                        int maxHeight) {
-        int length = Math.min(this.length, maxLength) - paneOffsetX;
-        int height = Math.min(this.height, maxHeight) - paneOffsetY;
+    public GuiItemContainer display() {
+        GuiItemContainer container = new GuiItemContainer(getLength(), getHeight());
 
-        int[][] positions = new int[length][height];
+        int[][] positions = new int[getLength()][getHeight()];
 
         for (int[] array : positions) {
             Arrays.fill(array, -1);
@@ -98,8 +88,8 @@ public class MasonryPane extends Pane implements Orientable {
 
             if (orientation == Orientation.HORIZONTAL) {
                 outerLoop:
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < length; x++) {
+                for (int y = 0; y < getHeight(); y++) {
+                    for (int x = 0; x < getLength(); x++) {
                         //check whether the pane fits
                         boolean fits = true;
 
@@ -120,24 +110,15 @@ public class MasonryPane extends Pane implements Orientable {
                                 }
                             }
 
-                            pane.setX(x);
-                            pane.setY(y);
-
-                            pane.display(
-                                inventoryComponent,
-                                paneOffsetX + getSlot().getX(length),
-                                paneOffsetY + getSlot().getY(length),
-                                Math.min(this.length, maxLength),
-                                Math.min(this.height, maxHeight)
-                            );
+                            container.apply(pane.display(), x, y);
                             break outerLoop;
                         }
                     }
                 }
             } else if (orientation == Orientation.VERTICAL) {
                 outerLoop:
-                for (int x = 0; x < length; x++) {
-                    for (int y = 0; y < height; y++) {
+                for (int x = 0; x < getLength(); x++) {
+                    for (int y = 0; y < getHeight(); y++) {
                         //check whether the pane fits
                         boolean fits = true;
 
@@ -158,44 +139,26 @@ public class MasonryPane extends Pane implements Orientable {
                                 }
                             }
 
-                            pane.setX(x);
-                            pane.setY(y);
-
-                            pane.display(
-                                inventoryComponent,
-                                paneOffsetX + getSlot().getX(length),
-                                paneOffsetY + getSlot().getY(length),
-                                Math.min(this.length, maxLength),
-                                Math.min(this.height, maxHeight)
-                            );
+                            container.apply(pane.display(), x, y);
                             break outerLoop;
                         }
                     }
                 }
             }
         }
+
+        this.cachedPositions = positions;
+
+        return container;
     }
 
     @Override
-    public boolean click(@NotNull Gui gui, @NotNull InventoryComponent inventoryComponent,
-                         @NotNull InventoryClickEvent event, int slot, int paneOffsetX, int paneOffsetY, int maxLength,
-                         int maxHeight) {
-        int length = Math.min(this.length, maxLength);
-        int height = Math.min(this.height, maxHeight);
+    public boolean click(@NotNull Gui gui, @NotNull GuiComponent guiComponent, @NotNull InventoryClickEvent event,
+                         @NotNull Slot slot) {
+        int x = slot.getX(getLength());
+        int y = slot.getY(getLength());
 
-        Slot paneSlot = getSlot();
-
-        int xPosition = paneSlot.getX(maxLength);
-        int yPosition = paneSlot.getY(maxLength);
-
-        int totalLength = inventoryComponent.getLength();
-
-        int adjustedSlot = slot - (xPosition + paneOffsetX) - totalLength * (yPosition + paneOffsetY);
-
-        int x = adjustedSlot % totalLength;
-        int y = adjustedSlot / totalLength;
-
-        if (x < 0 || x >= length || y < 0 || y >= height) {
+        if (x < 0 || x >= getLength() || y < 0 || y >= getHeight()) {
             return false;
         }
 
@@ -203,13 +166,25 @@ public class MasonryPane extends Pane implements Orientable {
 
         boolean success = false;
 
-        for (Pane pane : new ArrayList<>(panes)) {
+        for (int index = 0; index < this.panes.size(); index++) {
+            Pane pane = this.panes.get(index);
+
             if (!pane.isVisible()) {
                 continue;
             }
 
-            success = success || pane.click(gui, inventoryComponent, event, slot, paneOffsetX + xPosition,
-                paneOffsetY + yPosition, length, height);
+            outer:
+            for (int column = 0; column < this.cachedPositions.length; column++) {
+                for (int row = 0; row < this.cachedPositions[column].length; row++) {
+                    if (this.cachedPositions[column][row] != index) {
+                        continue;
+                    }
+
+                    success = success || pane.click(gui, guiComponent, event, Slot.fromXY(x - column, y - row));
+
+                    break outer;
+                }
+            }
         }
 
         return success;
@@ -219,7 +194,7 @@ public class MasonryPane extends Pane implements Orientable {
 	@Contract(pure = true)
 	@Override
     public MasonryPane copy() {
-		MasonryPane masonryPane = new MasonryPane(getSlot(), length, height, getPriority());
+		MasonryPane masonryPane = new MasonryPane(getLength(), getHeight(), getPriority());
 
 		for (Pane pane : panes) {
             masonryPane.addPane(pane.copy());
@@ -290,49 +265,50 @@ public class MasonryPane extends Pane implements Orientable {
      */
     @NotNull
     public static MasonryPane load(@NotNull Object instance, @NotNull Element element, @NotNull Plugin plugin) {
-        try {
-            MasonryPane masonryPane = new MasonryPane(
-                Integer.parseInt(element.getAttribute("length")),
-                Integer.parseInt(element.getAttribute("height"))
-            );
-
-            Pane.load(masonryPane, instance, element);
-            Orientable.load(masonryPane, element);
-
-            if (element.hasAttribute("populate")) {
-                return masonryPane;
-            }
-
-            NodeList childNodes = element.getChildNodes();
-
-            for (int j = 0; j < childNodes.getLength(); j++) {
-                Node pane = childNodes.item(j);
-
-                if (pane.getNodeType() != Node.ELEMENT_NODE) {
-                    continue;
-                }
-
-                masonryPane.addPane(Gui.loadPane(instance, pane, plugin));
-            }
-
-            return masonryPane;
-        } catch (NumberFormatException exception) {
-            throw new XMLLoadException(exception);
+        if (!element.hasAttribute("length")) {
+            throw new XMLLoadException("Masonry pane XML tag does not have the mandatory length attribute");
         }
-    }
 
-    /**
-     * Loads a masonry pane from a given element
-     *
-     * @param instance the instance class
-     * @param element the element
-     * @return the masonry pane
-     * @deprecated this method is no longer used internally and has been superseded by
-     *             {@link #load(Object, Element, Plugin)}
-     */
-    @NotNull
-    @Deprecated
-    public static MasonryPane load(@NotNull Object instance, @NotNull Element element) {
-        return load(instance, element, JavaPlugin.getProvidingPlugin(MasonryPane.class));
+        if (!element.hasAttribute("height")) {
+            throw new XMLLoadException("Masonry pane XML tag does not have the mandatory height attribute");
+        }
+
+        int length;
+        int height;
+
+        try {
+            length = Integer.parseInt(element.getAttribute("length"));
+        } catch (NumberFormatException exception) {
+            throw new XMLLoadException("Length attribute is not an integer", exception);
+        }
+
+        try {
+            height = Integer.parseInt(element.getAttribute("height"));
+        } catch (NumberFormatException exception) {
+            throw new XMLLoadException("Height attribute is not an integer", exception);
+        }
+
+        MasonryPane masonryPane = new MasonryPane(length, height);
+
+        Pane.load(masonryPane, instance, element);
+        Orientable.load(masonryPane, element);
+
+        if (element.hasAttribute("populate")) {
+            return masonryPane;
+        }
+
+        NodeList childNodes = element.getChildNodes();
+
+        for (int j = 0; j < childNodes.getLength(); j++) {
+            Node pane = childNodes.item(j);
+
+            if (pane.getNodeType() != Node.ELEMENT_NODE) {
+                continue;
+            }
+
+            masonryPane.addPane(Gui.loadPane(instance, pane, plugin));
+        }
+
+        return masonryPane;
     }
 }

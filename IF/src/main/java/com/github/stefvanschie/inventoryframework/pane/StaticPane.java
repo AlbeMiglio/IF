@@ -1,9 +1,10 @@
 package com.github.stefvanschie.inventoryframework.pane;
 
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
 import com.github.stefvanschie.inventoryframework.gui.type.util.Gui;
 import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
+import com.github.stefvanschie.inventoryframework.pane.util.GuiItemContainer;
 import com.github.stefvanschie.inventoryframework.pane.util.Slot;
 import com.github.stefvanschie.inventoryframework.util.GeometryUtil;
 import org.bukkit.event.inventory.InventoryClickEvent;
@@ -32,8 +33,7 @@ import java.util.function.Consumer;
 public class  StaticPane extends Pane implements Flippable, Rotatable {
 
 	/**
-	 * A map of locations inside this pane and their item. The locations are stored in a way where the x coordinate is
-     * the key and the y coordinate is the value.
+	 * A map of locations inside this pane and their item.
 	 */
 	@NotNull
 	protected final Map<Slot, GuiItem> items;
@@ -51,59 +51,32 @@ public class  StaticPane extends Pane implements Flippable, Rotatable {
     /**
      * Creates a new static pane.
      *
-     * @param slot the slot of the pane
      * @param length the length of the pane
      * @param height the height of the pane
      * @param priority the priority of the pane
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public StaticPane(Slot slot, int length, int height, @NotNull Priority priority) {
-        super(slot, length, height, priority);
+    public StaticPane(int length, int height, @NotNull Priority priority) {
+        super(length, height, priority);
 
         this.items = new HashMap<>(length * height);
-    }
-
-    public StaticPane(int x, int y, int length, int height, @NotNull Priority priority) {
-        this(Slot.fromXY(x, y), length, height, priority);
     }
 
     /**
      * Creates a new static pane.
      *
-     * @param slot the slot of the pane
      * @param length the length of the pane
      * @param height the height of the pane
-     * @since 0.10.8
+     * @since 0.12.0
      */
-    public StaticPane(Slot slot, int length, int height) {
-        this(slot, length, height, Priority.NORMAL);
-    }
-
-	public StaticPane(int x, int y, int length, int height) {
-		this(x, y, length, height, Priority.NORMAL);
-	}
-
     public StaticPane(int length, int height) {
-        this(0, 0, length, height);
+        this(length, height, Priority.NORMAL);
     }
 
-    /**
-     * {@inheritDoc}
-     *
-     * If there are multiple items in the same position when displaying the items, either one of those items may be
-     * shown. In particular, there is no guarantee that a specific item will be shown.
-     *
-     * @param inventoryComponent {@inheritDoc}
-     * @param paneOffsetX {@inheritDoc}
-     * @param paneOffsetY {@inheritDoc}
-     * @param maxLength {@inheritDoc}
-     * @param maxHeight {@inheritDoc}
-     */
+    @NotNull
 	@Override
-	public void display(@NotNull InventoryComponent inventoryComponent, int paneOffsetX, int paneOffsetY, int maxLength,
-                        int maxHeight) {
-		int length = Math.min(this.length, maxLength);
-		int height = Math.min(this.height, maxHeight);
+	public GuiItemContainer display() {
+        GuiItemContainer container = new GuiItemContainer(getLength(), getHeight());
 
 		items.entrySet().stream().filter(entry -> entry.getValue().isVisible()).forEach(entry -> {
 			Slot location = entry.getKey();
@@ -117,25 +90,38 @@ public class  StaticPane extends Pane implements Flippable, Rotatable {
 			if (flipVertically)
 				y = height - y - 1;
 
-			Map.Entry<Integer, Integer> coordinates = GeometryUtil.processClockwiseRotation(x, y, length, height,
-				rotation);
+			Map.Entry<Integer, Integer> coordinates = GeometryUtil.processClockwiseRotation(x, y, getLength(),
+                    getHeight(), rotation);
 
 			x = coordinates.getKey();
 			y = coordinates.getValue();
 
-			if (x < 0 || x >= length || y < 0 || y >= height) {
+			if (x < 0 || x >= getLength() || y < 0 || y >= getHeight()) {
 			    return;
             }
 
-			GuiItem item = entry.getValue();
-
-            Slot slot = getSlot();
-            int finalRow = slot.getY(maxLength) + y + paneOffsetY;
-			int finalColumn = slot.getX(maxLength) + x + paneOffsetX;
-
-			inventoryComponent.setItem(item, finalColumn, finalRow);
+            container.setItem(entry.getValue(), x, y);
 		});
+
+        return container;
 	}
+
+    /**
+     * Adds a gui item at the specific spot in the pane. If the specified slot is already in use, the previous item will
+     * be overwritten by the new item. This is regardless of the way the slot is specified.
+     *
+     * @param item the item to set
+     * @param slot the position of the item
+     * @since 0.10.8
+     */
+    public void addItem(@NotNull GuiItem item, Slot slot) {
+        int x = slot.getX(getLength());
+        int y = slot.getY(getLength());
+
+        this.items.keySet().removeIf(s -> s.getX(getLength()) == x && s.getY(getLength()) == y);
+
+        this.items.put(slot, item);
+    }
 
 	/**
 	 * Adds a gui item at the specific spot in the pane. If there is another item specified in terms of x and y
@@ -150,21 +136,6 @@ public class  StaticPane extends Pane implements Flippable, Rotatable {
 	}
 
     /**
-     * Adds a gui item at the specific spot in the pane. If the slot is specified in terms of an x and y coordinate pair
-     * and this pane contains another item whose position is specified as such and these positions are equal, the old
-     * item will be overwritten by this item. If the slot is specified in terms of an index and this pane contains
-     * another item whose position is specified as such and these positions are equal, the old item will be overwritten
-     * by this item.
-     *
-     * @param item the item to set
-     * @param slot the position of the item
-     * @since 0.10.8
-     */
-    public void addItem(@NotNull GuiItem item, Slot slot) {
-        this.items.put(slot, item);
-    }
-
-    /**
      * Removes the specified item from the pane
      *
      * @param item the item to remove
@@ -175,49 +146,37 @@ public class  StaticPane extends Pane implements Flippable, Rotatable {
     }
 
     /**
-     * Removes the specified item from the pane. This will only remove items whose slot was specified in terms of an x
-     * and y coordinate pair which matches the coordinate specified.
+     * Removes the specified item from the pane. This will remove an item regardless of how the slot was specified. If
+     * there is no item at the specified coordinates, this method will do nothing.
      *
      * @param x the x coordinate of the item to remove
      * @param y the y coordinate of the item to remove
      * @since 0.10.0
+     * @see #removeItem(Slot)
      */
     public void removeItem(int x, int y) {
-        this.items.remove(Slot.fromXY(x, y));
+        this.items.keySet().removeIf(s -> s.getX(getLength()) == x && s.getY(getLength()) == y);
     }
 
     /**
-     * Removes the specified item from the pane. This will only remove items whose slot was specified in the same way as
-     * the original slot and whose slot positions match.
+     * Removes the specified item from the pane. This will remove an item regardless of how the slot was specified. If
+     * there is no item at the specified coordinates, this method will do nothing.
      *
      * @param slot the slot of the item to remove
      * @since 0.10.8
      */
     public void removeItem(@NotNull Slot slot) {
-        this.items.remove(slot);
+        removeItem(slot.getX(getLength()), slot.getY(getLength()));
     }
 
 	@Override
-	public boolean click(@NotNull Gui gui, @NotNull InventoryComponent inventoryComponent,
-                         @NotNull InventoryClickEvent event, int slot, int paneOffsetX, int paneOffsetY, int maxLength,
-                         int maxHeight) {
-		int length = Math.min(this.length, maxLength);
-		int height = Math.min(this.height, maxHeight);
-
-        Slot paneSlot = getSlot();
-
-        int xPosition = paneSlot.getX(maxLength);
-        int yPosition = paneSlot.getY(maxLength);
-
-        int totalLength = inventoryComponent.getLength();
-
-        int adjustedSlot = slot - (xPosition + paneOffsetX) - totalLength * (yPosition + paneOffsetY);
-
-        int x = adjustedSlot % totalLength;
-        int y = adjustedSlot / totalLength;
+	public boolean click(@NotNull Gui gui, @NotNull GuiComponent guiComponent, @NotNull InventoryClickEvent event,
+                         @NotNull Slot slot) {
+        int x = slot.getX(getLength());
+        int y = slot.getY(getLength());
 
 		//this isn't our item
-		if (x < 0 || x >= length || y < 0 || y >= height) {
+		if (x < 0 || x >= getLength() || y < 0 || y >= getHeight()) {
             return false;
         }
 
@@ -244,7 +203,7 @@ public class  StaticPane extends Pane implements Flippable, Rotatable {
     @Contract(pure = true)
 	@Override
     public StaticPane copy() {
-        StaticPane staticPane = new StaticPane(getSlot(), length, height, getPriority());
+        StaticPane staticPane = new StaticPane(getLength(), getHeight(), getPriority());
 
         for (Map.Entry<Slot, GuiItem> entry : items.entrySet()) {
             staticPane.addItem(entry.getValue().copy(), entry.getKey());
@@ -283,7 +242,7 @@ public class  StaticPane extends Pane implements Flippable, Rotatable {
      * @see #fillWith(ItemStack, Consumer)
      * @since 0.10.8
 	 */
-	public void fillWith(@NotNull ItemStack itemStack, @Nullable Consumer<InventoryClickEvent> action,
+	public void fillWith(@NotNull ItemStack itemStack, @Nullable Consumer<? super InventoryClickEvent> action,
                          @NotNull Plugin plugin) {
 		//The non empty spots
 		Set<Slot> locations = this.items.keySet();
@@ -313,7 +272,7 @@ public class  StaticPane extends Pane implements Flippable, Rotatable {
      * @param action The action called whenever an interaction with the item happens
      * @since 0.5.9
      */
-    public void fillWith(@NotNull ItemStack itemStack, @Nullable Consumer<InventoryClickEvent> action) {
+    public void fillWith(@NotNull ItemStack itemStack, @Nullable Consumer<? super InventoryClickEvent> action) {
         fillWith(itemStack, action, JavaPlugin.getProvidingPlugin(StaticPane.class));
     }
 
@@ -328,11 +287,54 @@ public class  StaticPane extends Pane implements Flippable, Rotatable {
 		this.fillWith(itemStack, null);
 	}
 
+    /**
+     * Gets the item located at the provided slot. If the provided slot is empty, this will return null. The slots are
+     * checked based on their position without regard for their underlying definition. For example, if an item was added
+     * with its slot specified as an x,y coordinate pair, but this method is invoked with a slot specified as an index,
+     * this item may still be returned if the x,y coordinate pair and slot are at the same position, given the current
+     * dimensions of the pane. If multiple items match the position indicated by the provided slot, any of those items
+     * may be the result of this invocation.
+     *
+     * @param slot the slot of the item
+     * @return the item at this position, or null if there is no such item
+     * @since 0.11.4
+     */
+    @Nullable
+    @Contract(pure = true)
+    public GuiItem getItem(@NotNull Slot slot) {
+        int x = slot.getX(getLength());
+        int y = slot.getY(getLength());
+
+        for (Map.Entry<Slot, GuiItem> entry : this.items.entrySet()) {
+            Slot key = entry.getKey();
+
+            if (key.getX(getLength()) == x && key.getY(getLength()) == y) {
+                return entry.getValue();
+            }
+        }
+
+        return null;
+    }
+
 	@NotNull
 	@Override
 	public Collection<GuiItem> getItems() {
 		return items.values();
 	}
+
+    /**
+     * Gets all items by their corresponding slots. The slots correspond to the type they were added with. For example,
+     * if the slot was specified as an x,y coordinate pair, the slot will also be specified as such a pair. The returned
+     * map is unmodifiable.
+     *
+     * @return a map of all items by their slot
+     * @since 0.11.4
+     */
+    @NotNull
+    @Contract(pure = true)
+    public Map<@NotNull Slot, @NotNull GuiItem> getSlottedItems() {
+        return Collections.unmodifiableMap(this.items);
+    }
 
     @Override
     public void clear() {
@@ -385,50 +387,51 @@ public class  StaticPane extends Pane implements Flippable, Rotatable {
 	 */
 	@NotNull
 	public static StaticPane load(@NotNull Object instance, @NotNull Element element, @NotNull Plugin plugin) {
-		try {
-			StaticPane staticPane = new StaticPane(
-				Integer.parseInt(element.getAttribute("length")),
-				Integer.parseInt(element.getAttribute("height"))
-            );
+        if (!element.hasAttribute("length")) {
+            throw new XMLLoadException("Cycle button XML tag does not have the mandatory length attribute");
+        }
 
-			Pane.load(staticPane, instance, element);
-			Flippable.load(staticPane, element);
-			Rotatable.load(staticPane, element);
+        if (!element.hasAttribute("height")) {
+            throw new XMLLoadException("Cycle button XML tag does not have the mandatory height attribute");
+        }
 
-			if (element.hasAttribute("populate"))
-				return staticPane;
+        int length;
+        int height;
 
-			NodeList childNodes = element.getChildNodes();
+        try {
+            length = Integer.parseInt(element.getAttribute("length"));
+        } catch (NumberFormatException exception) {
+            throw new XMLLoadException("Length attribute is not an integer", exception);
+        }
 
-			for (int i = 0; i < childNodes.getLength(); i++) {
-				Node item = childNodes.item(i);
+        try {
+            height = Integer.parseInt(element.getAttribute("height"));
+        } catch (NumberFormatException exception) {
+            throw new XMLLoadException("Height attribute is not an integer", exception);
+        }
 
-				if (item.getNodeType() != Node.ELEMENT_NODE)
-					continue;
+        StaticPane staticPane = new StaticPane(length, height);
 
-				Element child = (Element) item;
+        Pane.load(staticPane, instance, element);
+        Flippable.load(staticPane, element);
+        Rotatable.load(staticPane, element);
 
-				staticPane.addItem(Pane.loadItem(instance, child, plugin), Slot.deserialize(child));
-			}
+        if (element.hasAttribute("populate"))
+            return staticPane;
 
-			return staticPane;
-		} catch (NumberFormatException exception) {
-			throw new XMLLoadException(exception);
-		}
+        NodeList childNodes = element.getChildNodes();
+
+        for (int i = 0; i < childNodes.getLength(); i++) {
+            Node item = childNodes.item(i);
+
+            if (item.getNodeType() != Node.ELEMENT_NODE)
+                continue;
+
+            Element child = (Element) item;
+
+            staticPane.addItem(GuiItem.loadItem(instance, child, plugin), Slot.deserialize(child));
+        }
+
+        return staticPane;
 	}
-
-    /**
-     * Loads an outline pane from a given element
-     *
-     * @param instance the instance class
-     * @param element  the element
-     * @return the outline pane
-     * @deprecated this method is no longer used internally and has been superseded by
-     *             {@link #load(Object, Element, Plugin)}
-     */
-    @NotNull
-    @Deprecated
-    public static StaticPane load(@NotNull Object instance, @NotNull Element element) {
-        return load(instance, element, JavaPlugin.getProvidingPlugin(StaticPane.class));
-    }
 }

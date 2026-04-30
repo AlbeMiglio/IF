@@ -4,16 +4,16 @@ import com.github.stefvanschie.inventoryframework.HumanEntityCache;
 import com.github.stefvanschie.inventoryframework.abstraction.CartographyTableInventory;
 import com.github.stefvanschie.inventoryframework.adventuresupport.TextHolder;
 import com.github.stefvanschie.inventoryframework.exception.XMLLoadException;
-import com.github.stefvanschie.inventoryframework.gui.InventoryComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiComponent;
+import com.github.stefvanschie.inventoryframework.gui.GuiItem;
 import com.github.stefvanschie.inventoryframework.gui.type.util.InventoryBased;
 import com.github.stefvanschie.inventoryframework.gui.type.util.NamedGui;
+import com.github.stefvanschie.inventoryframework.pane.Pane;
 import com.github.stefvanschie.inventoryframework.util.version.Version;
 import com.github.stefvanschie.inventoryframework.util.version.VersionMatcher;
-import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.entity.HumanEntity;
-import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
@@ -32,6 +32,8 @@ import javax.xml.parsers.ParserConfigurationException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -42,35 +44,35 @@ import java.util.List;
 public class CartographyTableGui extends NamedGui implements InventoryBased {
 
     /**
-     * Represents the inventory component for the map
+     * Represents the gui component for the map
      */
     @NotNull
-    private InventoryComponent mapComponent = new InventoryComponent(1, 1);
+    private GuiComponent mapComponent = new GuiComponent(1, 1);
 
     /**
-     * Represents the inventory component for the paper
+     * Represents the gui component for the paper
      */
     @NotNull
-    private InventoryComponent paperComponent = new InventoryComponent(1, 1);
+    private GuiComponent paperComponent = new GuiComponent(1, 1);
 
     /**
-     * Represents the inventory component for the output
+     * Represents the gui component for the output
      */
     @NotNull
-    private InventoryComponent outputComponent = new InventoryComponent(1, 1);
+    private GuiComponent outputComponent = new GuiComponent(1, 1);
 
     /**
-     * Represents the inventory component for the player inventory
+     * Represents the gui component for the player inventory
      */
     @NotNull
-    private InventoryComponent playerInventoryComponent = new InventoryComponent(9, 4);
+    private GuiComponent playerGuiComponent = new GuiComponent(9, 4);
 
     /**
      * An internal cartography table inventory
      */
     @NotNull
     private final CartographyTableInventory cartographyTableInventory = VersionMatcher.newCartographyTableInventory(
-        Version.getVersion(), this
+        Version.getVersion()
     );
 
     /**
@@ -118,13 +120,19 @@ public class CartographyTableGui extends NamedGui implements InventoryBased {
     }
 
     @Override
-    public void show(@NotNull HumanEntity humanEntity) {
-        if (!(humanEntity instanceof Player)) {
-            throw new IllegalArgumentException("Cartography tables can only be opened by players");
-        }
+    public void update() {
+        super.updating = true;
 
         if (isDirty()) {
+            Inventory oldInventory = this.inventory;
             this.inventory = createInventory();
+
+            if (oldInventory != null) {
+                for (HumanEntity viewer : new ArrayList<>(oldInventory.getViewers())) {
+                    viewer.openInventory(this.inventory);
+                }
+            }
+
             markChanges();
         }
 
@@ -133,22 +141,76 @@ public class CartographyTableGui extends NamedGui implements InventoryBased {
         getMapComponent().display(getInventory(), 0);
         getPaperComponent().display(getInventory(), 1);
         getOutputComponent().display(getInventory(), 2);
-        getPlayerInventoryComponent().display();
+        getPlayerGuiComponent().display();
 
-        if (getPlayerInventoryComponent().hasItem()) {
+        for (HumanEntity viewer : getViewers()) {
+            ItemStack cursor = viewer.getItemOnCursor();
+            viewer.setItemOnCursor(new ItemStack(Material.AIR));
+
+            populateBottomInventory(viewer);
+
+            viewer.setItemOnCursor(cursor);
+        }
+
+        if (!super.updating) {
+            throw new AssertionError("Gui#isUpdating became false before Gui#update finished");
+        }
+
+        super.updating = false;
+    }
+
+    @NotNull
+    @Contract(pure = true)
+    @Override
+    public Iterable<? extends GuiItem> getItems() {
+        Collection<@NotNull GuiItem> items = new HashSet<>();
+
+        for (Pane pane : getMapComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getPaperComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getOutputComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        for (Pane pane : getPlayerGuiComponent().getPanes()) {
+            items.addAll(pane.getItems());
+        }
+
+        return items;
+    }
+
+    @Override
+    public void show(@NotNull HumanEntity humanEntity) {
+        if (isDirty()) {
+            update();
+        }
+
+        populateBottomInventory(humanEntity);
+
+        humanEntity.openInventory(getInventory());
+    }
+
+    /**
+     * Populates the inventory of the {@link HumanEntity} if needed.
+     *
+     * @param humanEntity the human entity
+     * @since 0.11.4
+     */
+    private void populateBottomInventory(@NotNull HumanEntity humanEntity) {
+        if (getPlayerGuiComponent().hasItem()) {
             HumanEntityCache humanEntityCache = getHumanEntityCache();
 
-            if (humanEntityCache.contains(humanEntity)) {
+            if (!humanEntityCache.contains(humanEntity)) {
                 humanEntityCache.storeAndClear(humanEntity);
             }
 
-            getPlayerInventoryComponent().placeItems(humanEntity.getInventory(), 0);
+            getPlayerGuiComponent().placeItems(humanEntity.getInventory(), 0);
         }
-
-        //also let Bukkit know that we opened an inventory
-        humanEntity.openInventory(getInventory());
-
-        cartographyTableInventory.openInventory((Player) humanEntity, getTitleHolder(), getTopItems());
     }
 
     @NotNull
@@ -160,7 +222,7 @@ public class CartographyTableGui extends NamedGui implements InventoryBased {
         gui.mapComponent = mapComponent.copy();
         gui.paperComponent = paperComponent.copy();
         gui.outputComponent = outputComponent.copy();
-        gui.playerInventoryComponent = playerInventoryComponent.copy();
+        gui.playerGuiComponent = this.playerGuiComponent.copy();
 
         gui.setOnTopClick(this.onTopClick);
         gui.setOnBottomClick(this.onBottomClick);
@@ -182,7 +244,7 @@ public class CartographyTableGui extends NamedGui implements InventoryBased {
         } else if (rawSlot == 2) {
             getOutputComponent().click(this, event, 0);
         } else {
-            getPlayerInventoryComponent().click(this, event, rawSlot - 3);
+            getPlayerGuiComponent().click(this, event, rawSlot - 3);
         }
     }
 
@@ -199,14 +261,18 @@ public class CartographyTableGui extends NamedGui implements InventoryBased {
     @Contract(pure = true)
     @Override
     public boolean isPlayerInventoryUsed() {
-        return getPlayerInventoryComponent().hasItem();
+        return getPlayerGuiComponent().hasItem();
     }
 
     @NotNull
     @Contract(pure = true)
     @Override
     public Inventory createInventory() {
-		return getTitleHolder().asInventoryTitle(this, InventoryType.CARTOGRAPHY);
+        Inventory inventory = this.cartographyTableInventory.createInventory(getTitleHolder());
+
+        addInventory(inventory, this);
+
+		return inventory;
     }
 
     @Contract(pure = true)
@@ -223,90 +289,51 @@ public class CartographyTableGui extends NamedGui implements InventoryBased {
     }
 
     /**
-     * Handles an incoming inventory click event
-     *
-     * @param event the event to handle
-     * @since 0.8.0
-     */
-    public void handleClickEvent(@NotNull InventoryClickEvent event) {
-        int slot = event.getRawSlot();
-        Player player = (Player) event.getWhoClicked();
-
-        if (slot >= 3 && slot <= 38) {
-            cartographyTableInventory.sendItems(player, getTopItems());
-        } else if (slot >= 0 && slot <= 2) {
-            //the client rejects the output item if send immediately
-            Bukkit.getScheduler().runTask(super.plugin, () ->
-                    cartographyTableInventory.sendItems(player, getTopItems()));
-
-            if (event.isCancelled()) {
-                cartographyTableInventory.clearCursor(player);
-            }
-        }
-    }
-
-    /**
-     * Gets the inventory component representing the map
+     * Gets the gui component representing the map
      *
      * @return the map component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getMapComponent() {
+    public GuiComponent getMapComponent() {
         return mapComponent;
     }
 
     /**
-     * Gets the inventory component representing the paper
+     * Gets the gui component representing the paper
      *
      * @return the paper component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getPaperComponent() {
+    public GuiComponent getPaperComponent() {
         return paperComponent;
     }
 
     /**
-     * Gets the inventory component representing the output
+     * Gets the gui component representing the output
      *
      * @return the output component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getOutputComponent() {
+    public GuiComponent getOutputComponent() {
         return outputComponent;
     }
 
     /**
-     * Gets the inventory component representing the player inventory
+     * Gets the gui component representing the player inventory
      *
-     * @return the player inventory component
+     * @return the player gui component
      * @since 0.8.0
      */
     @NotNull
     @Contract(pure = true)
-    public InventoryComponent getPlayerInventoryComponent() {
-        return playerInventoryComponent;
-    }
-
-    /**
-     * Gets the top items
-     *
-     * @return the top items
-     * @since 0.8.0
-     */
-    @Nullable
-    @Contract(pure = true)
-    private ItemStack[] getTopItems() {
-        return new ItemStack[] {
-            getMapComponent().getItem(0, 0),
-            getPaperComponent().getItem(0, 0),
-            getOutputComponent().getItem(0, 0)
-        };
+    public GuiComponent getPlayerGuiComponent() {
+        return this.playerGuiComponent;
     }
 
     /**
@@ -378,7 +405,7 @@ public class CartographyTableGui extends NamedGui implements InventoryBased {
                 throw new XMLLoadException("Component tag does not have a name specified");
             }
 
-            InventoryComponent component;
+            GuiComponent component;
 
             switch (componentElement.getAttribute("name")) {
                 case "map":
@@ -391,7 +418,7 @@ public class CartographyTableGui extends NamedGui implements InventoryBased {
                     component = cartographyTableGui.getOutputComponent();
                     break;
                 case "player-inventory":
-                    component = cartographyTableGui.getPlayerInventoryComponent();
+                    component = cartographyTableGui.getPlayerGuiComponent();
                     break;
                 default:
                     throw new XMLLoadException("Unknown component name");

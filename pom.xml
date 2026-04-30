@@ -7,6 +7,10 @@
     <modules>
         <module>IF</module>
         <module>nms/abstraction</module>
+        <module>nms/1_21_11</module>
+        <module>nms/1_21_9-10</module>
+        <module>nms/1_21_6-8</module>
+        <module>nms/1_21_5</module>
         <module>nms/1_21_4</module>
         <module>nms/1_21_2-3</module>
         <module>nms/1_21_1</module>
@@ -18,19 +22,14 @@
         <module>nms/1_20_1</module>
         <module>nms/1_20_0</module>
         <module>nms/1_19_4</module>
-        <module>nms/1_19_3</module>
-        <module>nms/1_19_2</module>
-        <module>nms/1_19_1</module>
-        <module>nms/1_19_0</module>
         <module>nms/1_18_2</module>
-        <module>nms/1_18_1</module>
-        <module>nms/1_18_0</module>
         <module>nms/1_17_1</module>
-        <module>nms/1_17_0</module>
+        <module>nms/1_16_5</module>
         <module>adventure-support</module>
         <module>inventory-view/iv-abstract-class</module>
         <module>inventory-view/iv-abstraction</module>
         <module>inventory-view/iv-interface</module>
+        <module>nms/26_1</module>
     </modules>
 
     <properties>
@@ -38,12 +37,12 @@
         <maven.compiler.target>17</maven.compiler.target>
         <maven.deploy.skip>true</maven.deploy.skip>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <adventure.version>4.18.0</adventure.version>
+        <adventure.version>5.0.1</adventure.version>
     </properties>
 
     <groupId>com.github.stefvanschie.inventoryframework</groupId>
     <artifactId>IF-parent</artifactId>
-    <version>0.10.20-SNAPSHOT</version>
+    <version>0.12.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>IF</name>
@@ -73,7 +72,7 @@
         <dependency>
             <groupId>org.jetbrains</groupId>
             <artifactId>annotations</artifactId>
-            <version>26.0.2</version>
+            <version>26.1.0</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>
@@ -101,24 +100,24 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.2</version>
+                <version>3.5.5</version>
                 <dependencies>
                     <dependency>
                         <groupId>org.apache.maven.surefire</groupId>
                         <artifactId>surefire-junit-platform </artifactId>
-                        <version>3.5.2</version>
+                        <version>3.5.5</version>
                     </dependency>
                     <dependency>
                         <groupId>org.junit.jupiter</groupId>
                         <artifactId>junit-jupiter-engine</artifactId>
-                        <version>5.11.4</version>
+                        <version>6.0.3</version>
                     </dependency>
                 </dependencies>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>3.3.1</version>
+                <version>3.4.0</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -131,7 +130,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.11.2</version>
+                <version>3.12.0</version>
                 <executions>
                     <execution>
                         <id>attach-javadocs</id>
@@ -143,7 +142,7 @@
                 <configuration>
                     <links>
                         <link>https://hub.spigotmc.org/javadocs/bukkit/</link>
-                        <link>https://jd.adventure.kyori.net/api/4.10.0/</link>
+                        <link>https://jd.papermc.io/adventure/${adventure.version}/</link>
                     </links>
                 </configuration>
             </plugin>

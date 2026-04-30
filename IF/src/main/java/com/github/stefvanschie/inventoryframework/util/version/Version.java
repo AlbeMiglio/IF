@@ -17,46 +17,11 @@ import java.util.EnumSet;
 public enum Version {
 
     /**
-     * Version 1.14
+     * Version 1.16.5
      *
-     * @since 0.10.0
+     * @since 0.12.0
      */
-    V1_14,
-
-    /**
-     * Version 1.15
-     *
-     * @since 0.10.0
-     */
-    V1_15,
-
-    /**
-     * Version 1.16.1
-     *
-     * @since 0.10.0
-     */
-    V1_16_1,
-
-    /**
-     * Version 1.16.2 - 1.16.3
-     *
-     * @since 0.10.0
-     */
-    V1_16_2_3,
-
-    /**
-     * Version 1.16.4 - 1.16.5
-     *
-     * @since 0.10.0
-     */
-    V1_16_4_5,
-
-    /**
-     * Version 1.17
-     *
-     * @since 0.10.0
-     */
-    V1_17_0,
+    V1_16_5,
 
     /**
      * Version 1.17.1
@@ -66,53 +31,11 @@ public enum Version {
     V1_17_1,
 
     /**
-     * Version 1.18.0
-     *
-     * @since 0.10.4
-     */
-    V1_18_0,
-
-    /**
-     * Version 1.18.1
-     *
-     * @since 0.10.4
-     */
-    V1_18_1,
-
-    /**
      * Version 1.18.2
      *
      * @since 0.10.5
      */
     V1_18_2,
-
-    /**
-     * Version 1.19.0
-     *
-     * @since 0.10.6
-     */
-    V1_19_0,
-
-    /**
-     * Version 1.19.1
-     *
-     * @since 0.10.7
-     */
-    V1_19_1,
-
-    /**
-     * Version 1.19.2
-     *
-     * @since 0.10.7
-     */
-    V1_19_2,
-
-    /**
-     * Version 1.19.3
-     *
-     * @since 0.10.8
-     */
-    V1_19_3,
 
     /**
      * Version 1.19.4
@@ -189,7 +112,42 @@ public enum Version {
      *
      * @since 0.10.19
      */
-    V1_21_4;
+    V1_21_4,
+
+    /**
+     * Version 1.21.5
+     *
+     * @since 0.11.0
+     */
+    V1_21_5,
+
+    /**
+     * Version 1.21.6 - 1.21.8
+     *
+     * @since 0.11.3
+     */
+    V1_21_6_8,
+
+    /**
+     * Version 1.21.9 - 1.21.10
+     *
+     * @since 0.11.5
+     */
+    V1_21_9_10,
+
+    /**
+     * Version 1.21.11
+     *
+     * @since 0.11.6
+     */
+    V1_21_11,
+
+    /**
+     * Version 26.1 or higher.
+     *
+     * @since 0.12.0
+     */
+    V26_1;
 
     /**
      * A collection of versions on which modern smithing tables are available.
@@ -197,7 +155,8 @@ public enum Version {
     private static final Collection<Version> MODERN_SMITHING_TABLE_VERSIONS = EnumSet.of(
             V1_19_4,
             V1_20_0, V1_20_1, V1_20_2, V1_20_3_4, V1_20_5, V1_20_6,
-            V1_21_0, V1_21_1, V1_21_2_3, V1_21_4
+            V1_21_0, V1_21_1, V1_21_2_3, V1_21_4, V1_21_5, V1_21_6_8, V1_21_9_10, V1_21_11,
+            V26_1
     );
 
     /**
@@ -205,12 +164,7 @@ public enum Version {
      */
     @NotNull
     private static final Collection<@NotNull Version> LEGACY_SMITHING_TABLE_VERSIONS = EnumSet.of(
-            V1_14,
-            V1_15,
-            V1_16_1, V1_16_2_3, V1_16_4_5,
-            V1_17_0, V1_17_1,
-            V1_18_0, V1_18_1, V1_18_2,
-            V1_19_0, V1_19_1, V1_19_2, V1_19_3, V1_19_4
+            V1_16_5, V1_17_1, V1_18_2, V1_19_4
     );
 
     /**
@@ -218,7 +172,8 @@ public enum Version {
      */
     @NotNull
     private static final Collection<@NotNull Version> INTERFACE_INVENTORY_VIEW = EnumSet.of(
-            V1_21_0, V1_21_1, V1_21_2_3, V1_21_4
+            V1_21_0, V1_21_1, V1_21_2_3, V1_21_4, V1_21_5, V1_21_6_8, V1_21_9_10, V1_21_11,
+            V26_1
     );
 
     /**
@@ -230,6 +185,17 @@ public enum Version {
     @Contract(pure = true)
     public boolean isInventoryViewInterface() {
         return INTERFACE_INVENTORY_VIEW.contains(this);
+    }
+
+    /**
+     * Checks if this version is older than the provided version.
+     *
+     * @param version the version to check if it is newer
+     * @return true if this version is older, false otherwise
+     * @since 0.11.6
+     */
+    public boolean isOlderThan(@NotNull Version version) {
+        return ordinal() < version.ordinal();
     }
 
     /**
@@ -265,43 +231,17 @@ public enum Version {
     public static Version getVersion() {
         String version = Bukkit.getBukkitVersion().split("-")[0];
 
+        if (version.indexOf('.') == 2) {
+            return V26_1; //this is a 26.1+ release, so it's V26.1
+        }
+
         switch (version) {
-            case "1.14":
-            case "1.14.1":
-            case "1.14.2":
-            case "1.14.3":
-            case "1.14.4":
-                return V1_14;
-            case "1.15":
-            case "1.15.1":
-            case "1.15.2":
-                return V1_15;
-            case "1.16.1":
-                return V1_16_1;
-            case "1.16.2":
-            case "1.16.3":
-                return V1_16_2_3;
-            case "1.16.4":
             case "1.16.5":
-                return V1_16_4_5;
-            case "1.17":
-                return V1_17_0;
+                return V1_16_5;
             case "1.17.1":
                 return V1_17_1;
-            case "1.18":
-                return V1_18_0;
-            case "1.18.1":
-                return V1_18_1;
             case "1.18.2":
                 return V1_18_2;
-            case "1.19":
-                return V1_19_0;
-            case "1.19.1":
-                return V1_19_1;
-            case "1.19.2":
-                return V1_19_2;
-            case "1.19.3":
-                return V1_19_3;
             case "1.19.4":
                 return V1_19_4;
             case "1.20":
@@ -326,6 +266,17 @@ public enum Version {
                 return V1_21_2_3;
             case "1.21.4":
                 return V1_21_4;
+            case "1.21.5":
+                return V1_21_5;
+            case "1.21.6":
+            case "1.21.7":
+            case "1.21.8":
+                return V1_21_6_8;
+            case "1.21.9":
+            case "1.21.10":
+                return V1_21_9_10;
+            case "1.21.11":
+                return V1_21_11;
             default:
                 throw new UnsupportedVersionException("The server version provided is not supported");
         }
